@@ -89,10 +89,38 @@
 
 - **不点「应用」**：那是唯一会重写宿主包的入口（解开 `app.asar`、打 66 个 app 平面补丁、
   把 asar 改名）。`autoApplyOnStart: false` 时启动路径是 `skip:boot-no-host-write`。
+  ⚠️ 0.2.1 额外理由：那 66 个补丁的 `pattern` 字符串是按 **0.2.0-rc.2 源码**写的，
+  在 0.2.1 上大概率大面积 `not found`——点了不但没用，还会重新解包/换包。
 - 不挂 `dsh-purge/redteam`(index)：它会把官方预设落到 `$DSH_HOME/.agent-presets/redteam/`，
   与 dsh-agent-studio 管的同名 `redteam` 预设冲突（历史事故：
   `~/.dsh/redteam/preset-declare.json` 里的 `"error": "Duplicate agent preset: redteam"`）。
 - 不动 `dsh.profile.bundles`、不动插件市场开关。
+
+## 一个容易踩的落差：三条行不都走这份 fork
+
+预设里只有 **`purge-core`** 指向 fork 的绝对路径。另外两行用的是**裸包名**：
+
+```yaml
+- id: redteam-store   name: dsh-purge/redteam/store    # → 解析到已安装副本
+- id: redteam-tools   name: dsh-purge/redteam/tools    # → 解析到已安装副本
+```
+
+也就是 **store / tools 跑的是 `~/.dsh/profiles/desktop/node_modules/dsh-purge` 那份**，
+不是这个 fork。目前两份的这些文件**逐字节相同**（差异只在 fork 的
+`lib/index.js`、`lib/identity.js`、`package.json`、`presets/redteam/agent.cordis.yml`），
+所以没有功能差异。
+
+**但**：以后若只改 fork 的 `lib/redteam/*.js`，运行时**不会生效**。要改就把预设里那两行的
+`name` 换成 fork 的绝对路径：
+
+```yaml
+- id: redteam-store
+  name: /Users/cyberpsychosis/Dsh/dsh-purge-fork/lib/redteam/store.js
+- id: redteam-tools
+  name: /Users/cyberpsychosis/Dsh/dsh-purge-fork/lib/redteam/tools.js
+```
+
+（换完要 ⌘Q 重启。换成绝对路径后 `dsh.client` 扫描同样不会命中；子路径本来就不触发扫描。）
 
 ## 技能文件的 frontmatter 规则（0.2.1 实测）
 
