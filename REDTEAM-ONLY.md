@@ -94,6 +94,32 @@
   `~/.dsh/redteam/preset-declare.json` 里的 `"error": "Duplicate agent preset: redteam"`）。
 - 不动 `dsh.profile.bundles`、不动插件市场开关。
 
+## 技能文件的 frontmatter 规则（0.2.1 实测）
+
+`skills/redteam/*.md` 是**扁平文件**形态（`<root>/<name>.md`），0.2.1 仍把它和
+`<name>/SKILL.md` 平级对待；扫描**只有一层**，别改成嵌套目录（`redteam/skills/recon/foo.md`
+扫不到）。技能名取自 frontmatter 的 `name`，不是文件名。
+
+| 字段 | 状态 |
+|---|---|
+| `name` | **必填**，且必须匹配 `^[a-z0-9]+(?:-[a-z0-9]+)*$` |
+| `description` | **必填**，非空 |
+| `whenToUse` | 可选（进 summary；模型目录只渲染 description） |
+| `metadata` | 可选，任意 object |
+| `disable-model-invocation` / `user-invocable` | 可选，严格布尔（kebab-case） |
+| `role` / `enabled` | **宿主静默忽略**——纯注释，不是开关 |
+| `modelInvocable` / `userInvocable` / `disableModelInvocation` | **硬拒**：出现即整条技能被丢弃（只留一条 warn） |
+
+两条必须记住的：
+
+1. **绝不要写 camelCase 的那三个旧键**。它们不是"被忽略"，而是让**整个技能文件消失**。
+   要开关就用 kebab-case 反义键：`disable-model-invocation: true` / `user-invocable: false`。
+2. **`enabled: false` 不会停用技能**（宿主不认这个字段）。真要让某个技能消失：删/移文件，
+   或加 `disable-model-invocation: true`（只对模型隐藏）。
+
+`role:` 同理只是留档（宿主和本插件的 `skill-availability.js` 都不读它）——角色分工靠
+预设提示词，不靠技能文件筛选。
+
 ## 署名
 
 本分支基于 [YuJunZhiXue/dsh-purge](https://github.com/YuJunZhiXue/dsh-purge)（MIT），
