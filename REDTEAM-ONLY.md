@@ -148,6 +148,37 @@
 `role:` 同理只是留档（宿主和本插件的 `skill-availability.js` 都不读它）——角色分工靠
 预设提示词，不靠技能文件筛选。
 
+## 角色稿注入（`redteamRole:`）在 0.2.1 下的约束
+
+**结论：可用**。链路是：`inbox.claim()` 同步 emit `agent/inbox/claimed`（载荷由
+`dsh-agent:242-246` 的 `agentEvents.fused()` 补上 `agent`）→ `noteClaimedMessage` 记进
+模块级 Map → `systemPrompt.assemble` → fork 的 global listener → `insertRoleSection`
+→ 子会话 system 提示词。后备路径是 `roleFromSessionEvents()` 扫描 `user/message` 事件。
+18 项宿主依赖在 0.2.1 全部存在，无硬断点。
+
+⚠️ **硬约束：子代理必须继承 redteam 预设。** 角色稿与破甲注入都过 `redteamOnly` 门禁
+（`isRedteamSession(child)`）。0.2.1 的 `dsh-subagent` 默认让子会话继承父预设
+（`composedPreset(parent.ctx)` + `composeFrom`），所以当前配置安全。**但**：
+
+- 若以后给 `tool-subagent` 配上 `agentPreset` / `allowedAgentPresets`（模型就能传
+  `agent_preset` 把子代理切到别的预设）；
+- 或改用 Agent Teams 的 `spawn_teammate`（成员不走 `subagent` 那条继承链）；
+
+**子代理就不再是 redteam 预设 → `redteamOnly` 直接 `return assembled` → 角色稿和破甲
+双双静默消失**（不报错、不拒答）。要动这两处，先确认子代理仍在 redteam 预设上。
+
+**另一个已知遗留问题（未修，非 0.2.1 导致）**：`currentEngagementId()` 读的是
+**全局** `$DSH_HOME/redteam/current`，而靶标绑定是按 root session 存的。两个红队会话
+绑定**不同靶标**时，后 activate 的会覆盖 `current` → 另一个会话的子代理可能拿到
+**错误靶标**的 `agents/<role>.md`（或空）。
+最小修法：`resolveEngagement` 写绑定时同时落一份 `redteam/current.<rootSessionId>`；
+role-section 沿 `header.parentSession` 求出 root id 后优先读它、回退全局 `current`
+（约 15 行，不动注入链）。单会话下无影响。
+
+**未来风险**：`session.snapshotEvents()` 在 0.2.1 已标 deprecated（"new calls are
+prohibited"），冷恢复子代理的角色回填依赖它。0.3 若移除，要改用异步的
+`sessionQuery`/`sessionProjections`——当前装配路径是同步的，届时得重做。
+
 ## 署名
 
 本分支基于 [YuJunZhiXue/dsh-purge](https://github.com/YuJunZhiXue/dsh-purge)（MIT），
