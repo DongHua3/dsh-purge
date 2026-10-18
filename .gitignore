@@ -32,3 +32,7 @@ default-prompt-inject.md
 /official-harness-payload.7z
 *.asar
 *.asar.bak
+
+# local build artefacts
+*.bak-*
+.backup-installed-*

@@ -28,7 +28,8 @@
   config:
     includeHarnessIdentity: false
     personaPrefix: ""
-    personaSuffix: Your working directory is {{cwd}}.
+    # 0.2.1+ 的 prompt 变量只注册 provider / model；cwd 占位符已移除，留空避免装配失败。
+    personaSuffix: ""
 
 - id: dsh-purge
   inject: [systemPrompt, tools]
