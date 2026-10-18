@@ -1,3 +1,19 @@
+# 1.1.72
+
+## 中文
+
+- 版本 **1.1.72**。
+- 新增随包技能 `skills/paper-autopilot/`：论文全自动流水线（22 步，中文学位论文 / SCI 双模式），含 15 份参考、17 个脚本、2 个仿真模型与一套跑通过的实战案例。**不参与破甲补丁，也不会自动注入**；装不装都不影响红队功能。
+- 新增 `scripts/install-paper-autopilot.mjs`（也可 `npm run install:skill`）：定位当前宿主 `$DSH_HOME`，把该技能复制到 `$DSH_HOME/skills/paper-autopilot`；同名目录先备份为 `.bak-<时间戳>`，不碰其它技能目录、不改 profile、不写全局配置。支持 `--dry-run` / `--json` / `--dest`。
+- 本版不改任何补丁逻辑，只增内容与安装入口。
+
+## English
+
+- **1.1.72**.
+- Ships a bundled skill at `skills/paper-autopilot/`: an autonomous 22-stage paper pipeline (Chinese thesis / SCI modes) with 15 references, 17 scripts, 2 simulation models, and a completed real project as a worked example. It takes no part in the jailbreak patches and is never injected.
+- New `scripts/install-paper-autopilot.mjs` (also `npm run install:skill`): resolves the current host `$DSH_HOME` and copies the skill to `$DSH_HOME/skills/paper-autopilot`, backing up an existing folder as `.bak-<timestamp>`. Touches no other skill folder, no profile, no global config. Supports `--dry-run` / `--json` / `--dest`.
+- No patch logic changed in this release; content and an install entry point only.
+
 # 1.1.71
 
 ## 中文

@@ -381,13 +381,25 @@ On the Clean page, under Prompt. One host per line, then Save list. Steps are in
 | Prompt | edit `prompt-inject.md` as the session override |
 | Own servers | one IP or exact hostname per line, saved to `$DSH_HOME/net-scope-allow.txt` |
 | Rule sets | multiple `AGENTS.md` / `CLAUDE.md`; Enable writes under `$DSH_HOME`, Delete removes the row |
-| Skills | import a zip or folder into this host’s official `$DSH_HOME/skills/<id>/SKILL.md` (web and desktop each use their own home; no drive letter is hardcoded); DSH owns match, load, and `/name`. You can also delete that folder yourself |
+| Skills | import a zip or folder into this host’s official `$DSH_HOME/skills/<id>/SKILL.md` (web and desktop each use their own home; no drive letter is hardcoded); DSH owns match, load, and `/name`. You can also delete that folder yourself. This package also bundles `paper-autopilot`; install it with `node scripts/install-paper-autopilot.mjs` (see [Layout](#layout)) |
 
 ---
 
 ## Layout
 
-`bin/` is the CLI, `lib/` is patches and the drill console, `presets/redteam/` is the red-team preset, `skills/redteam/` is the bundled skills, and `client.js` is the dock.
+`bin/` is the CLI, `lib/` is patches and the drill console, `presets/redteam/` is the red-team preset, `skills/redteam/` is the bundled red-team skills, `skills/paper-autopilot/` is the bundled paper skill, and `client.js` is the dock.
+
+### Bundled skill: paper-autopilot
+
+`skills/paper-autopilot/` ships a complete skill: an **autonomous paper pipeline** (22 stages, Chinese thesis / SCI journal modes) with real literature search and citation verification, simulation-data provenance, AI-tell scanning, Word/PDF build, and a pre-submission gate. It takes no part in the jailbreak patches and is never injected; installing it is optional and changes nothing about the red-team patches.
+
+```sh
+node scripts/install-paper-autopilot.mjs            # copy into this host's $DSH_HOME/skills/paper-autopilot
+node scripts/install-paper-autopilot.mjs --dry-run  # show what would happen, write nothing
+node scripts/install-paper-autopilot.mjs --json     # machine-readable result
+```
+
+It only copies: an existing directory is backed up as `paper-autopilot.bak-<timestamp>`, other skill folders are untouched, no profile or global config is modified. No restart needed (DSH watches the skills folder). Trigger it by asking for a paper/thesis or with `/paper`. Searches and figures need a Python with `requests`, `matplotlib`, `python-docx`, and `pymupdf`.
 
 Runtime files live under `$DSH_HOME`: `prompt-inject.md`, `rules/`, `skills/`, `net-scope-allow.txt`, `redteam/`. If `DSH_HOME` is unset, the launcher-adjacent `.dsh` wins over `~/.dsh`. Web and the desktop app each use their own home. Skills are not part of the inject section and do not replace the prompt.
 

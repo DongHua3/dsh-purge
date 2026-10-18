@@ -386,14 +386,30 @@ dsh-purge --uninstall
 | 提示词       | 编辑 `prompt-inject.md`，作为会话覆盖段                                                                              |
 | 自己的服务器    | 每行登记一个 IP 或完整主机名，保存后写入 `$DSH_HOME/net-scope-allow.txt`                                                     |
 | 规则集       | 多套 `AGENTS.md` / `CLAUDE.md`；启用写入 `$DSH_HOME`，删除从列表去掉                                                      |
-| Skill     | 导入压缩包或文件夹到当前宿主官方目录 `$DSH_HOME/skills/<id>/SKILL.md`（Web / 桌面各用自己的主目录，不写死盘符）；命中、加载、`/名称` 由 DSH 负责。也可自己删该文件夹 |
+| Skill     | 导入压缩包或文件夹到当前宿主官方目录 `$DSH_HOME/skills/<id>/SKILL.md`（Web / 桌面各用自己的主目录，不写死盘符）；命中、加载、`/名称` 由 DSH 负责。也可自己删该文件夹。本包另自带 `paper-autopilot`，用 `node scripts/install-paper-autopilot.mjs` 一键装（见[目录结构](#目录结构)） |
 
 
 ---
 
 ## 目录结构
 
-`bin/` 是命令行，`lib/` 是补丁和演练台，`presets/redteam/` 是红队预设，`skills/redteam/` 是随包技能，`client.js` 是侧栏。
+`bin/` 是命令行，`lib/` 是补丁和演练台，`presets/redteam/` 是红队预设，`skills/redteam/` 是随包红队技能，`skills/paper-autopilot/` 是随包论文技能，`client.js` 是侧栏。
+
+### 随包技能：paper-autopilot
+
+`skills/paper-autopilot/` 是本包自带的一个完整技能：**论文全自动流水线**（22 步，中文学位论文 / SCI 双模式，
+自带真实文献检索核验、仿真数据溯源、AI 腔扫描、Word/PDF 成品构建与交付前总检）。
+它不参与破甲补丁，也不会被自动注入；装不装都不影响红队补丁。
+
+```sh
+node scripts/install-paper-autopilot.mjs            # 装到当前宿主 $DSH_HOME/skills/paper-autopilot
+node scripts/install-paper-autopilot.mjs --dry-run  # 先看会做什么，不写盘
+node scripts/install-paper-autopilot.mjs --json     # 机器可读结果
+```
+
+安装只做复制：同名目录已存在先备份为 `paper-autopilot.bak-<时间戳>`，不碰其它技能目录，不改 profile，不写全局配置。
+装完无需重启（DSH 文件监视器会加载）；说「帮我写论文 / 毕业论文 / 接着上次的论文继续」或敲 `/paper` 触发。
+跑检索与出图要用带 `requests` / `matplotlib` / `python-docx` / `pymupdf` 的 Python 解释器。
 
 运行时文件在 `$DSH_HOME`：`prompt-inject.md`、`rules/`、`skills/`、`net-scope-allow.txt`、`redteam/`。未设 `DSH_HOME` 时，优先用 dsh 安装目录旁边的 `.dsh`，再退回 `~/.dsh`。Web 和桌面端各用自己那一份主目录。Skill 不进注入段，也不顶替提示词。
 
