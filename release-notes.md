@@ -1,3 +1,25 @@
+# 1.1.73
+
+## 中文
+
+- 版本 **1.1.73**，适配 DSH **0.2.1-rc.2**（0.2.0 仍可用）。
+- 修 #40：0.2.1 的 `assemble()` 在 early-return 后多了一行 `requiredContexts`，contexts 从 `[]` 改成按 required 过滤。旧模板只认 0.2.0 的尾巴，整条补丁在 0.2.1 上「跳过 1」→ 宿主标记没落盘 → 重启/卸载被「清洗没有写进全部宿主，已取消重启」挡下。现在补上 0.2.1 的骨架匹配（语义与 1.1.72 的 `fold-complete inject first` 一致），并保留 required context 过滤。
+- 修 `{{cwd}}` 让整轮运行失败：0.2.1 起 agent-loop 不再注册 `cwd` 插值变量（工作目录改由 `working-directory` 上下文下发），任何段里残留 `{{cwd}}` 都会在 `renderPrompt` 抛 `unknown prompt variable "{{cwd}}"`。
+  - bundle patch 不再写死 `personaSuffix: Your working directory is {{cwd}}.`。
+  - 运行时按本轮真实 cwd 拼后缀（`cwdSuffixText`）：宿主已下发工作目录上下文时不再重复写；0.2.0 没有该上下文时补回同一句人话。
+  - 组装收尾再兜一层 `fillCwdPlaceholders`：用户旧配置 / 旧提示词里残留的 `{{cwd}}` 一律换成真实路径，彻底堵掉 render 抛错。
+- `host-clean` 的脏判定同时认 0.2.0 / 0.2.1 的 `: [completeSection],` 形态，并识别新的 `fold-complete inject first` 标记。
+
+## English
+
+- **1.1.73**, target DSH **0.2.1-rc.2** (0.2.0 still works).
+- Patch #40: 0.2.1's `assemble()` adds a `requiredContexts` line after the early return and filters contexts by required instead of returning `[]`. The old template only matched 0.2.0, so on 0.2.1 the patch was skipped, the host marker never landed, and restart/uninstall was blocked with "host not clean". The 0.2.1 shape is now matched with the same `fold-complete inject first` semantics as 1.1.72, and the required-context filter is preserved.
+- Fix the `{{cwd}}` run failure: since 0.2.1 the agent loop no longer registers a `cwd` interpolation variable (the working directory arrives as the `working-directory` context), so any leftover `{{cwd}}` throws `unknown prompt variable` in `renderPrompt`.
+  - The bundle patch no longer hardcodes `personaSuffix: Your working directory is {{cwd}}.`.
+  - The runtime builds the suffix from the real cwd (`cwdSuffixText`), skipping it when the host already supplies the working-directory context and keeping the same sentence on 0.2.0.
+  - A final `fillCwdPlaceholders` pass replaces any remaining `{{cwd}}` in old configs/prompts, so rendering can never throw.
+- `host-clean` recognizes both the 0.2.0 and 0.2.1 `: [completeSection],` shapes and the new `fold-complete inject first` marker.
+
 # 1.1.71
 
 ## 中文
