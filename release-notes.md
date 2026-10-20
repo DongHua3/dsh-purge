@@ -1,3 +1,35 @@
+# 1.1.73
+
+## 中文
+
+- 版本 **1.1.73**，适配 DSH **0.2.1-rc.2**（0.2.0 仍可用）。
+- **修 `{{cwd}}` 让每轮对话直接失败**（#114 / #126 / #136 / #143）：0.2.1 起 agent-loop 不再注册 `cwd` 插值变量（工作目录改由 `working-directory` 上下文下发），任何段里残留 `{{cwd}}` 都会在 `renderPrompt` 抛 `unknown prompt variable`。
+  - bundle patch 不再写死 `personaSuffix: Your working directory is {{cwd}}.`。
+  - `overlayOfficialIdentity()` 按本轮真实 cwd 拼后缀（`cwdSuffixText`）：宿主已下发工作目录上下文时不再重复写；0.2.0 没有该上下文时补回同一句人话；用户自写的多句后缀不吞。
+  - 组装收尾再兜一层 `fillCwdPlaceholders`：旧配置 / 旧提示词里残留的 `{{cwd}}` 一律换成真实路径，render 阶段不可能再抛未注册变量。
+- **修 #40**：0.2.1 的 `assemble()` 在 early-return 后多了一行 `requiredContexts`，contexts 从 `[]` 改成按 required 过滤。旧模板只认 0.2.0 的尾巴，整条补丁在 0.2.1 上「跳过 1」→ 宿主标记没落盘 → 重启/卸载被「清洗没有写进全部宿主，已取消重启」挡下（#142）。现在补上 0.2.1 的骨架匹配（语义与 `fold-complete inject first` 一致），并保留 required context 过滤。
+- `host-clean` 的脏判定同时认 0.2.0 / 0.2.1 的 `: [completeSection],` 形态，并识别新的 `fold-complete inject first` 标记。
+- **修红队预设注册失败**（#138 / #146）：0.2.1-rc.2 起 `tool-subagent` 不再接受 `toolFilter`，整份 preset 注册失败、模式下拉里选不中。删除 `presets/redteam/agent.cordis.yml` 的 `toolFilter.deny`，叶子节点约束继续由 `maxDepth: 1` 保证。
+- **修红队预设 `cannot resolve @deepseek-ai/dsh-tools from host`**（#147）：Electron 桌面宿主把 `@deepseek-ai/*` 封在 `app.asar/dsh/node_modules` 里，旧的 6 条候选路径全部落空。新增从 `process.argv[1]` 推导宿主根和 `process.resourcesPath` 的候选，桌面端可直接解析。
+- **修空会话里 `/purge status` 结果不显示**（#145）：注册 command input 投影，让结果卡片在空会话可见；客户端依赖增加 `@deepseek-ai/dsh-client-ui-conversation`。
+- **界面文案补齐英文**：演练台（Drill）控制台与其全部面板、清洗面板硬编码文案、补丁表的分组/描述、计分页与报告里的得分点/判定口径、技能库「怎么修」指引、环境适配页、自己的服务器校验、更新/回退/卸载提示，以及服务端返回给面板的提示全部改为英文；中文仍保留在 `zh` 语言包、模型提示词、逻辑比对值和代码注释里。
+- 元数据：`dshTarget` → `0.2.1-rc.2`；新增 `test/` 回归（`node --test test/`），覆盖 `{{cwd}}` 装配、#40 补丁匹配、/purge command input。
+
+## English
+
+- **1.1.73**, target DSH **0.2.1-rc.2** (0.2.0 still works).
+- **Fix the `{{cwd}}` failure that killed every run** (#114 / #126 / #136 / #143): since 0.2.1 the agent loop no longer registers a `cwd` interpolation variable (the working directory arrives as the `working-directory` context), so any leftover `{{cwd}}` throws `unknown prompt variable` in `renderPrompt`.
+  - The bundle patch no longer hardcodes `personaSuffix: Your working directory is {{cwd}}.`
+  - `overlayOfficialIdentity()` builds the suffix from the real cwd (`cwdSuffixText`), skips it when the host already supplies the working-directory context, keeps the same sentence on 0.2.0, and preserves user-written multi-sentence suffixes.
+  - A final `fillCwdPlaceholders` pass replaces any remaining `{{cwd}}` from old configs/prompts with the real path, so rendering can never throw.
+- **Fix #40**: 0.2.1's `assemble()` adds a `requiredContexts` line after the early return and filters contexts by required instead of returning `[]`. The old template only matched 0.2.0, so on 0.2.1 the patch was skipped, the host marker never landed, and restart/uninstall was blocked with "host not clean" (#142). The 0.2.1 shape is now matched with the same `fold-complete inject first` semantics and the required-context filter is preserved.
+- `host-clean` recognizes both the 0.2.0 and 0.2.1 `: [completeSection],` shapes and the new `fold-complete inject first` marker.
+- **Fix red-team preset registration** (#138 / #146): since 0.2.1-rc.2 `tool-subagent` rejects `toolFilter`, so the whole preset failed to register. Removed the `toolFilter.deny` block from `presets/redteam/agent.cordis.yml`; `maxDepth: 1` still keeps subagents leaf-only.
+- **Fix `cannot resolve @deepseek-ai/dsh-tools from host`** (#147): the Electron desktop host ships `@deepseek-ai/*` inside `app.asar/dsh/node_modules`, so all six old candidates missed. Added candidates derived from `process.argv[1]` and `process.resourcesPath`.
+- **Fix `/purge status` result not rendering in an empty session** (#145): register a command-input projection so the result card is visible; the client now depends on `@deepseek-ai/dsh-client-ui-conversation`.
+- **Complete the English UI**: the whole Drill console and its panels, hardcoded copy in the clean panel, patch-table groups/descriptions, score points and criteria in the score page and reports, the Skills tab's "how to fix" guidance, environment setup, own-server validation, update/revert/uninstall messages, and server messages surfaced in the panel are English now; Chinese stays in the `zh` locale dictionary, model-facing prompts, logic comparison values, and code comments.
+- Metadata: `dshTarget` → `0.2.1-rc.2`; new `test/` regressions (`node --test test/`) cover `{{cwd}}` assembly, the #40 patch match and the `/purge` command input.
+
 # 1.1.71
 
 ## 中文

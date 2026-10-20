@@ -25,7 +25,9 @@
 # ── identity ────────────────────────────────────────────────────────────────
 
 # The preset's own persona, shadowing the deployment default for this agent.
-# `{{model}}` and `{{cwd}}` resolve from the agent's own route and workspace.
+# `{{model}}` is registered by the host. Do NOT write `{{cwd}}` here: since
+# 0.2.1-rc.2 the agent loop no longer registers it (the working directory is a
+# runtime context), and an unknown variable fails the whole run at render time.
 - id: persona
   name: '@deepseek-ai/dsh-persona'
   config:
@@ -306,18 +308,18 @@
         modelSelectionSettings: true
         backgroundMode: continuable
         # 子智能体是角色执行者（信息收集/资产梳理/漏洞发现/漏洞利用/内网渗透），**必须是叶子节点**：
-        # 靠提示词劝"不要再往下委派"是软的——模型完全可以无视。这里直接把委派工具从子会话的
-        # 工具目录里摘掉，子智能体连看都看不到 subagent / subagent_fork / workflow / ralph。
-        # maxDepth 同时收成 1 作为二道保险（默认 3 层太深，会白吃并发预算与上下文）。
+        # 靠提示词劝"不要再往下委派"是软的——模型完全可以无视，所以这里把 maxDepth 收成 1
+        # （默认 3 层太深，会白吃并发预算与上下文）。
+        #
+        # 历史：过去还用 toolFilter.deny 摘掉 subagent_fork / workflow / ralph 作二道保险，
+        # 但 dsh 0.2.1-rc.2 起 tool-subagent 不再接受 toolFilter——宿主直接抛
+        # "tool-subagent: toolFilter is no longer supported"，导致整个红队 preset 注册失败、
+        # 模式下拉里选不中（issue #138），所以那一段已删除。
+        # 现在只靠 maxDepth: 1：subagent_fork / workflow / ralph 都是 spawn-only 的委派工具，
+        # 深度 1 的叶子节点没有继续派发的机会，语义上等价。
         maxDepth: 1
-        # 注意：不能 deny `subagent` —— 它是这一行自己注册的 scoped 工具，不在全局工具库里，
+        # 另：不能 deny `subagent` —— 它是这一行自己注册的 scoped 工具，不在全局工具库里，
         # 写进 deny 会让 tools.restrict() 校验失败、整个委派路径报 "unknown global tool"（v0.8.0 踩过）。
-        # 子智能体拿不到 subagent_fork/workflow/ralph，加上 maxDepth: 1，实际已无派发能力。
-        toolFilter:
-          deny:
-            - subagent_fork
-            - workflow
-            - ralph
 
     # Fork omits model selection so provider/model stay equal to the parent and
     # the inherited history remains eligible for KV Cache reuse. This preset
