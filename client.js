@@ -8,7 +8,7 @@ window.__ModuleLoader__.load({ id: "dsh-purge", factory: (require) => {
 		const { useState, useEffect, useCallback, useRef, Component } = react;
 
 		const name = "dsh-purge";
-		const inject = ["slots", "locale"];
+		const inject = ["slots", "locale", "uiConversation"];
 		const NS = "settings.dsh-purge";
 		let translate = (key) => key;
 		function useT() {
@@ -8753,7 +8753,50 @@ body[data-ds-dark-theme] .dshp-rewind-item span{color:var(--dsw-alias-label-tert
 			ctx.effect(() => installRewindWatch(ctx), "dsh-purge: rewind watch");
 		}
 
+		// 普通 command 结果不会激活宿主的空会话；补上输入节点，让结果卡片可见。
+		const purgeCommandInputDefinition = {
+			kind: "dsh-purge-command-input",
+			target: "chat",
+			match: (event) => event.type === "command/run" && event.data.name === "purge"
+				? { id: String(event.data.commandId), role: "start" } : null,
+			start: (_context, match) => ({
+				commandId: match.event.data.commandId,
+				seq: match.event.seq,
+				time: match.event.time,
+				text: `/purge${(match.event.data.args ?? "").trimEnd()}`,
+			}),
+			update: (context) => context.state,
+			buildViewNode: (context) => context.state === undefined ? null : ({
+				key: context.key,
+				id: context.id,
+				kind: "dsh-purge-command-input",
+				target: "chat",
+				anchorSeq: context.state.seq - 0.1,
+				location: context.start?.location ?? { kind: "unresolved" },
+				visibility: "visible",
+				data: {
+					commandId: context.state.commandId,
+					text: context.state.text,
+					time: context.state.time,
+				},
+			}),
+		};
+
+		function PurgeCommandInputView({ node }) {
+			return h("div", {
+				role: "group", "aria-label": "/purge", "data-command-input": "",
+				style: { display: "flex", justifyContent: "flex-end", padding: "8px 24px" },
+			}, h("div", {
+				style: { whiteSpace: "pre-wrap", overflowWrap: "anywhere", maxWidth: "100%",
+					background: "var(--dsw-alias-bg-layer-2, #f3f4f6)", borderRadius: 12, padding: "10px 14px" },
+			}, node.data.text));
+		}
+
 		function apply(ctx) {
+			ctx.uiConversation.events.register(purgeCommandInputDefinition);
+			ctx.slots.inject("conversation.chat.node", () => ctx.slots.register({
+				name: "conversation.chat.node", key: "dsh-purge-command-input",
+			}, PurgeCommandInputView));
 			ctx.effect(() => ctx.locale.register(NS, { zh, en }), "dsh-purge: dictionaries");
 			const t = ctx.locale.bind(NS);
 			translate = t;
