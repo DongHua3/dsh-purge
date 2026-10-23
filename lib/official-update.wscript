@@ -49,33 +49,67 @@ function runInstaller(updated) {
   var args = updated ? ' --updated /S /D=' : ' /S /D=';
   return sh.Run('"' + installer + '"' + args + installDir, 0, true);
 }
+function resourcesPresent() {
+  // Required resources for a usable install: the packed archive or the unpacked app dir.
+  return fso.FileExists(asar) || fso.FolderExists(appDir);
+}
+// Success is installer exit code AND required resources present. Size/timestamp drift is
+// logged for diagnosis only: a real installer can produce byte-identical output, and the
+// old "size changed" heuristic then triggered a second install plus a bogus rollback.
+function decide(code, exeChanged, asarChanged, resourcesOk) {
+  log('decide exit=' + code + ' resources=' + resourcesOk + ' exeChanged=' + exeChanged + ' asarChanged=' + asarChanged);
+  return code === 0 && resourcesOk;
+}
 var code = runInstaller(true);
 log('installer ' + code);
 var exeChanged = fileSize(exe) !== exeBeforeSize || fileStamp(exe) !== exeBeforeStamp;
 var asarChanged = fileSize(asar) !== asarBeforeSize;
-var ok = exeChanged || asarChanged;
-log('changed exe=' + exeChanged + ' asar=' + asarChanged);
-if (!ok) {
+log('observed exe=' + exeChanged + ' asar=' + asarChanged);
+var resourcesOk = resourcesPresent();
+var ok = decide(code, exeChanged, asarChanged, resourcesOk);
+if (!ok && code === 0 && !resourcesOk) {
+  // Retry only when the installer reported success but the required resources are missing.
+  // A non-zero exit code is a real failure: retrying would start a bogus second install.
   code = runInstaller(false);
   log('installer-plain ' + code);
   exeChanged = fileSize(exe) !== exeBeforeSize || fileStamp(exe) !== exeBeforeStamp;
   asarChanged = fileSize(asar) !== asarBeforeSize;
-  ok = exeChanged || asarChanged;
-  log('changed-plain exe=' + exeChanged + ' asar=' + asarChanged);
+  resourcesOk = resourcesPresent();
+  log('observed-plain exe=' + exeChanged + ' asar=' + asarChanged);
+  ok = decide(code, exeChanged, asarChanged, resourcesOk);
 }
 if (!ok) {
   if (copiedAsar && fso.FileExists(asar)) {
     try { fso.DeleteFile(asar, true); log('rehid-asar'); } catch (hideErr) { log('rehid-asar ' + hideErr); }
   }
-  // A concurrent unpack helper may have recreated resources\app. On failure, move the patched dir back.
-  if (movedApp && prev && fso.FolderExists(prev)) {
+  // A concurrent unpack helper may have recreated resources\app. On failure we must NOT
+  // fso.DeleteFolder it: FSO deletes through an app\runtime -> resources\runtime junction and
+  // wipes the real runtime (that is how office/SKILL.md disappeared). Rename it into a unique
+  // app.dshpurge-failed-<ts> quarantine instead and let the Node side clean that up with
+  // fs.rmSync after validating the path; if the rename fails, keep the scene and log it.
+  var isolated = '';
+  if (movedApp) {
     if (fso.FolderExists(appDir)) {
-      try { fso.DeleteFolder(appDir, true); log('cleared-recreated-app'); } catch (clearErr) { log('cleared-recreated-app ' + clearErr); }
+      for (var k = 0; k < 20; k++) {
+        var quarantine = appDir + '.dshpurge-failed-' + (new Date().getTime());
+        try { fso.MoveFolder(appDir, quarantine); isolated = quarantine; log('isolated-app ' + quarantine); break; }
+        catch (isoErr) { log('isolate-app ' + (isoErr && isoErr.message ? isoErr.message : isoErr)); WScript.Sleep(250); }
+      }
+      if (fso.FolderExists(appDir)) log('isolate-app-kept ' + appDir);
     }
-    if (!fso.FolderExists(appDir)) {
-      try { fso.MoveFolder(prev, appDir); log('restored-app'); } catch (backErr) { log('restored-app ' + backErr); }
+    // Restore the pre-update app: prefer the canonical app.dshpurge-prev (that is the one
+    // moved out before the installer ran), otherwise the directory this run moved aside.
+    // Never restore the app a concurrent helper just rebuilt - it is the quarantined one.
+    var originalPrev = appDir + '.dshpurge-prev';
+    var restoreFrom = fso.FolderExists(originalPrev) ? originalPrev : prev;
+    if (!fso.FolderExists(appDir) && restoreFrom && fso.FolderExists(restoreFrom)) {
+      try { fso.MoveFolder(restoreFrom, appDir); log('restored-app ' + restoreFrom); }
+      catch (backErr) { log('restored-app ' + (backErr && backErr.message ? backErr.message : backErr)); }
+    } else if (fso.FolderExists(appDir)) {
+      log('restore-app-skipped ' + appDir);
     }
   }
+  log('decide-final rollback isolated=' + isolated);
   try { sh.Environment('PROCESS').Remove('ELECTRON_RUN_AS_NODE'); } catch (ignore) {}
   sh.Run('"' + exe + '"', 1, false);
   log('started-old');
