@@ -123,5 +123,16 @@ try {
   await fsp.rm(tmpHome, { recursive: true, force: true });
 }
 
+// 7) identity.js installAssembleGuard 在原生 assemble 抛异常时仍执行 rewrite 保留破甲注入
+const idMod = await import(pathToFileURL(path.join(root, "lib", "identity.js")).href);
+const fakePrompt = {
+  async assemble() {
+    throw new Error("unknown prompt variable {{bad}}");
+  },
+};
+idMod.installAssembleGuard(fakePrompt, (assembled) => idMod.rewritePromptAssembly(assembled, "INJECT_PAYLOAD_OK"));
+const guardedOut = await fakePrompt.assemble({});
+check("assembleGuard 原生异常时仍保留破甲注入", guardedOut.sections.some((s) => String(s?.text || "").includes("INJECT_PAYLOAD_OK")));
+
 console.log(failed === 0 ? "\nALL PASS" : `\n${failed} FAILED`);
 process.exit(failed === 0 ? 0 : 1);
