@@ -9,7 +9,9 @@
   - 运行时按本轮真实 cwd 拼后缀（`cwdSuffixText`）：宿主已下发工作目录上下文时不再重复写；0.2.0 没有该上下文时补回同一句人话。
   - 组装收尾再兜一层 `fillCwdPlaceholders`：用户旧配置 / 旧提示词里残留的 `{{cwd}}` 一律换成真实路径，彻底堵掉 render 抛错。
 - `host-clean` 的脏判定同时认 0.2.0 / 0.2.1 的 `: [completeSection],` 形态，并识别新的 `fold-complete inject first` 标记。
-- 修复红队预设（`presets/redteam/agent.cordis.yml`）：移除 DSH 0.2.1 已废弃的 `toolFilter` 字段，修复 `registered-broken` 注册失败。
+- 修复红队预设（`presets/redteam/agent.cordis.yml` & `lib/redteam/index.js`）：移除 DSH 0.2.1 已废弃的 `toolFilter` 字段并禁用 `tool-workflow` / `tool-ralph` 守住子代理叶子边界；老用户升级时自动自愈剥离已落盘旧预设里的 `toolFilter` 与 `{{cwd}}`。
+- 修复 `installAssembleGuard`（`lib/identity.js`）：原生 `assemble` 抛错时仍继续执行 `slot.rewrite` 注入破甲提示词，杜绝因单段异常丢失破甲身份而中途苏醒。
+- 修复桌面端 `repairOfficialCliAfterUnpack`（`lib/desktop.js`）：改用同步 `atomicWriteSync` 写入备份，消除未 `await` 异步拷贝导致的 `unhandledRejection` 崩溃风险，并支持识别 `DSH Desktop.exe`。
 - 修复 Windows `hostFs` 句柄与同步方法缺失（`lib/extract-asar.js`）：补齐 `closeSync` / `readSync` / `writeSync` / `fsyncSync` / `fstatSync` / `accessSync`，解决 `backupAll` 占位句柄未释放导致的 `.dshpurge.bak` `EPERM` 报错及文本 shim 漏判。
 - 修复 Windows 桌面端更新交接失败回滚穿透 Junction 误删真实 `runtime`（`lib/official-update.wscript` / `lib/official-update.js`）：回滚不再调用 `fso.DeleteFolder(resources\app)`，改为重命名隔离至 `app.dshpurge-failed-<ts>` 并由 Node `fs.rmSync` 校验清理。
 - 仓库更新源与 Release 工作流切换至 `DongHua3/dsh-purge`。
