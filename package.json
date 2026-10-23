@@ -21,6 +21,8 @@
   "files": [
     "lib",
     "!lib/default-prompt-inject.md",
+    "!lib/default-prompt-inject.*.md",
+    "!lib/default-prompt-inject.md.bak",
     "bin",
     "docs",
     "presets",
@@ -35,6 +37,7 @@
     "LICENSE"
   ],
   "scripts": {
+    "test": "node scripts/check-40-and-hostfs.mjs && node scripts/test-official-update-rollback.mjs",
     "embed-prompt": "node scripts/embed-default-prompt.mjs",
     "build:client": "node scripts/build-client.mjs"
   },

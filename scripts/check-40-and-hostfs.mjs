@@ -85,5 +85,43 @@ try {
 check("备份 rename 不再 EPERM", renameOk && fs.existsSync(dst));
 await fsp.rm(fixture, { recursive: true, force: true });
 
+// 5) desktop.js isOfficialHarnessExecutable 识别 DSH Desktop.exe 与同步备份
+const desktop = await import(pathToFileURL(path.join(root, "lib", "desktop.js")).href);
+check("isOfficialHarnessExecutable 识别 DSH Desktop.exe", desktop.isOfficialHarnessExecutable("C:\\Program Files\\DSH Desktop\\DSH Desktop.exe") === true);
+
+// 6) redteam installPreset 自愈已落盘旧预设里的 toolFilter
+const rt = await import(pathToFileURL(path.join(root, "lib", "redteam", "index.js")).href);
+const oldHome = process.env.DSH_HOME;
+const tmpHome = await fsp.mkdtemp(path.join(os.tmpdir(), "dsh-purge-rt-"));
+try {
+  process.env.DSH_HOME = tmpHome;
+  const presetDir = path.join(tmpHome, ".agent-presets", "redteam");
+  await fsp.mkdir(presetDir, { recursive: true });
+  const legacyYml = [
+    "- id: workflow-ptc",
+    "  name: '@deepseek-ai/dsh-workflow-ptc'",
+    "- id: tool-subagent",
+    "  name: '@deepseek-ai/dsh-tool-subagent'",
+    "  disabled: false",
+    "  config:",
+    "    maxDepth: 1",
+    "    toolFilter:",
+    "      deny:",
+    "        - subagent_fork",
+    "        - workflow",
+    "        - ralph",
+    "- id: redteam-tools",
+    "  name: dsh-purge/redteam/tools",
+  ].join("\n");
+  await fsp.writeFile(path.join(presetDir, "agent.cordis.yml"), legacyYml, "utf8");
+  const res = rt.installPreset({ force: false });
+  const repairedYml = await fsp.readFile(path.join(presetDir, "agent.cordis.yml"), "utf8");
+  check("redteam 旧预设自愈剥离 toolFilter", !repairedYml.includes("toolFilter:") && res.action === "repaired");
+} finally {
+  if (oldHome === undefined) delete process.env.DSH_HOME;
+  else process.env.DSH_HOME = oldHome;
+  await fsp.rm(tmpHome, { recursive: true, force: true });
+}
+
 console.log(failed === 0 ? "\nALL PASS" : `\n${failed} FAILED`);
 process.exit(failed === 0 ? 0 : 1);
