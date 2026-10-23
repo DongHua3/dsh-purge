@@ -9,6 +9,10 @@
   - 运行时按本轮真实 cwd 拼后缀（`cwdSuffixText`）：宿主已下发工作目录上下文时不再重复写；0.2.0 没有该上下文时补回同一句人话。
   - 组装收尾再兜一层 `fillCwdPlaceholders`：用户旧配置 / 旧提示词里残留的 `{{cwd}}` 一律换成真实路径，彻底堵掉 render 抛错。
 - `host-clean` 的脏判定同时认 0.2.0 / 0.2.1 的 `: [completeSection],` 形态，并识别新的 `fold-complete inject first` 标记。
+- 修复红队预设（`presets/redteam/agent.cordis.yml`）：移除 DSH 0.2.1 已废弃的 `toolFilter` 字段，修复 `registered-broken` 注册失败。
+- 修复 Windows `hostFs` 句柄与同步方法缺失（`lib/extract-asar.js`）：补齐 `closeSync` / `readSync` / `writeSync` / `fsyncSync` / `fstatSync` / `accessSync`，解决 `backupAll` 占位句柄未释放导致的 `.dshpurge.bak` `EPERM` 报错及文本 shim 漏判。
+- 修复 Windows 桌面端更新交接失败回滚穿透 Junction 误删真实 `runtime`（`lib/official-update.wscript` / `lib/official-update.js`）：回滚不再调用 `fso.DeleteFolder(resources\app)`，改为重命名隔离至 `app.dshpurge-failed-<ts>` 并由 Node `fs.rmSync` 校验清理。
+- 仓库更新源与 Release 工作流切换至 `DongHua3/dsh-purge`。
 
 ## English
 
@@ -19,6 +23,10 @@
   - The runtime builds the suffix from the real cwd (`cwdSuffixText`), skipping it when the host already supplies the working-directory context and keeping the same sentence on 0.2.0.
   - A final `fillCwdPlaceholders` pass replaces any remaining `{{cwd}}` in old configs/prompts, so rendering can never throw.
 - `host-clean` recognizes both the 0.2.0 and 0.2.1 `: [completeSection],` shapes and the new `fold-complete inject first` marker.
+- Fix redteam preset (`presets/redteam/agent.cordis.yml`): remove deprecated `toolFilter` rejected by DSH 0.2.1.
+- Fix Windows `hostFs` missing sync methods (`closeSync`, `readSync`, etc.): prevent `.dshpurge.bak` `EPERM` failures and text shim misdetection.
+- Fix Windows official update rollback (`lib/official-update.wscript` / `lib/official-update.js`): quarantine failed `resources\app` instead of calling `fso.DeleteFolder` across the `app\runtime` junction.
+- Point repository and auto-update endpoints to `DongHua3/dsh-purge`.
 
 # 1.1.71
 
