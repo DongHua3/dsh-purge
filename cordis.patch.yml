@@ -52,27 +52,17 @@
   config:
     policy: never
 
-- id: dsh-purge
-  inject: [systemPrompt, tools]
-  # 本体已经在 profile.bundles 里入队：这里只改它的 inject/config。
-  # 再 insert 一次会 already queued: dsh-purge（Hub 市场一键装就是这么挂的，#152 / #154）。
-  config:
-    enabled: true
-    autoApplyOnStart: false
-    autoUpdateOnStart: false
-    autoRevertOnMissing: false
-    injectOnce: false
-    stripMnemon: true
-    verbose: false
-    postPrompt: ""
-    postPromptOrder: 5100
-    autoRetry: true
-    retryMax: 3
-    autoContinue: false
-    continueMax: 3
-    continueText: "继续"
-    capabilityProtocol: true
-    hooksDenyBypass: true
+# ── 本体条目 ─────────────────────────────────────────────────────────────────
+# 0.2.1-rc.2 起 `profile.bundles` 不再自动为 bundle 建一个同名条目。旧版会自动入队，
+# 那时在 bundle 层写 `- id: dsh-purge` 改 inject/config 就够了（再 insert 会
+# already queued，#152 / #154）。现在这条 patch 永远匹配不到，dump-config 会打印
+# `patch: entry "dsh-purge" not found`，而条目根本不存在 —— 后果是宿主侧 apply()
+# 不执行（破甲提示词、tools 全不注入）、客户端模块不加载（会话标题旁按钮消失）。
+#
+# 所以本体改为由 scripts/ensure-profile-entry.mjs 写进**用户层**
+# `$DSH_HOME/profiles/<name>/cordis.patch.yml` 的末尾（用户层在 bundle 层之后应用）。
+# 安装后由 postinstall 自动补；手动补：node scripts/ensure-profile-entry.mjs
+# 校验：dsh --profile <name> --dump-config | grep '^- id: dsh-purge$'
 
 - insert:
     # 演练台：预设 + 技能落地（本插件 lib/redteam）

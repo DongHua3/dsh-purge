@@ -1,3 +1,27 @@
+# 1.1.80
+
+## 中文
+
+- 版本 **1.1.80**，适配 DSH **0.2.1-rc.2**。
+- **修「插件装上了但完全不生效」**：从 dsh 0.2.1-rc.2 起，`profile.bundles` **不再自动为 bundle 建一个同名条目**。旧版会自动入队，所以老写法在 bundle 层用 `- id: dsh-purge` 只改 `inject`/`config` 就够了（再 `insert` 反而会 `already queued`，#152 / #154）。
+  - 结果就是这条 patch 永远匹配不到，`--dump-config` 打印 `patch: entry "dsh-purge" not found`，而条目根本不存在。**症状**：宿主侧 `apply()` 不执行（破甲提示词、`tools` 全不注入），客户端模块不加载（会话标题旁的 **dsh-purge** 按钮消失），但 `plugins/dsh-purge` 明明装好了、版本也对。
+  - 修法：本体改为由新脚本 `scripts/ensure-profile-entry.mjs` 写进**用户层** `$DSH_HOME/profiles/<name>/cordis.patch.yml` 末尾（用户层在 bundle 层之后应用，所以生效）。脚本幂等——已有 `id: dsh-purge` 就跳过；写之前备份成 `cordis.patch.yml.bak-<时间戳>`。
+  - `package.json` 加 `postinstall` 自动补；已有安装可手动跑 `node scripts/ensure-profile-entry.mjs`（`--check` 只检查不写）。
+  - 校验命令：`dsh --profile <name> --dump-config | grep '^- id: dsh-purge$'`，有输出才算真的加载。
+  - bundle 层那条失效的 `- id: dsh-purge` 块已删除，并留注释说明原因，避免每次启动刷 `not found` 警告。
+  - 一个实现细节：`cordis.patch.yml` 内容是 `[]`（空 flow sequence）时不能直接追加块序列——`[]` 后面跟 `- insert:` 是非法 YAML（`expected '<document start>'`）。脚本对空文件/`[]` 走覆盖写，其余走追加。
+
+## English
+
+- **1.1.80**, target DSH **0.2.1-rc.2**.
+- **Fix "the plugin is installed but does nothing at all"**: since dsh 0.2.1-rc.2, `profile.bundles` **no longer auto-creates a same-named entry for a bundle**. Older builds queued it automatically, which is why the old approach — a bundle-layer `- id: dsh-purge` that only changed `inject`/`config` — used to be enough (and why `insert`ing it caused `already queued`, #152 / #154).
+  - The upshot: that patch can never match now. `--dump-config` prints `patch: entry "dsh-purge" not found` and the entry simply does not exist. **Symptoms**: host-side `apply()` never runs (no jailbreak prompt, no `tools` injection) and the client module is never loaded (the **dsh-purge** button next to the session title disappears) — even though `plugins/dsh-purge` is installed at the right version.
+  - Fix: the body is now written into the **user layer** `$DSH_HOME/profiles/<name>/cordis.patch.yml` by the new `scripts/ensure-profile-entry.mjs` (the user layer applies after the bundle layer, so it takes effect). The script is idempotent — it skips when `id: dsh-purge` already exists — and backs the file up to `cordis.patch.yml.bak-<timestamp>` first.
+  - `package.json` gains a `postinstall` that runs it; existing installs can run `node scripts/ensure-profile-entry.mjs` by hand (`--check` inspects without writing).
+  - Verify with: `dsh --profile <name> --dump-config | grep '^- id: dsh-purge$'` — output means it is actually loaded.
+  - The dead `- id: dsh-purge` block is removed from the bundle layer, with a comment explaining why, so each boot stops printing a `not found` warning.
+  - One implementation detail: when `cordis.patch.yml` contains `[]` (an empty flow sequence) you cannot append a block sequence — `[]` followed by `- insert:` is invalid YAML (`expected '<document start>'`). The script overwrites for an empty file or `[]`, and appends otherwise.
+
 # 1.1.79
 
 ## 中文
