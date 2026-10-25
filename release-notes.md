@@ -1,3 +1,27 @@
+# 1.1.77
+
+## 中文
+
+- 版本 **1.1.77**，适配 DSH **0.2.1-rc.2**。
+- **修 macOS 换包会把官方 app 打废**（新增 `lib/resign-macos.js`）：官方桌面包在 macOS 上是签过名的。插件解包 `Contents/Resources/app.asar`、换成 `Contents/Resources/app` 之后，bundle 的 CodeResources 与磁盘不再一致，Gatekeeper 会直接拒绝启动（"is damaged and can't be opened"）。而 `extract-asar.js` / `desktop.js` 全程没有平台判断，全仓也没有任何 `codesign` 调用——也就是说在 mac 上按一次「应用」就会毁掉那个 app。
+  - 现在换包 commit 成功后、任何 spawn/重启之前，调用 `resignBundleAfterSwap()` 做 `codesign --force --deep --sign -`（ad-hoc，不需要开发者证书）。
+  - `--deep` 在新版 macOS 上被标记弃用、个别版本会直接拒绝，因此失败后退一步只签外层 bundle。
+  - 重签失败**抛错并回滚**到换包前的目录：留一个签名失效的 app 比直接失败更糟。错误信息里给出可以手动执行的 `codesign` 命令。
+  - Windows / Linux 上 `needsResign()` 为 false，整段不执行，零副作用。
+  - 诚实说明：这条路径我这边没有 mac 机器实测。代码守卫、错误语义、路径解析都做了单测，但真机行为需要你在 mac 上验一次。
+- **README 补桌面端平台说明**：三份 README 都写明「桌面端只在 Windows 上验证过」，并说明 macOS 的重签行为与首次使用时的确认方法。
+
+## English
+
+- **1.1.77**, target DSH **0.2.1-rc.2**.
+- **Fix the desktop swap bricking the official app on macOS** (new `lib/resign-macos.js`): the official desktop bundle is code-signed on macOS. Once the plugin unpacks `Contents/Resources/app.asar` into `Contents/Resources/app`, the bundle's CodeResources no longer matches the disk and Gatekeeper refuses to launch it ("is damaged and can't be opened"). Neither `extract-asar.js` nor `desktop.js` had any platform check, and the repo had no `codesign` call at all — so on a Mac a single Apply destroys that app.
+  - The swap now calls `resignBundleAfterSwap()` — `codesign --force --deep --sign -` (ad-hoc, no developer certificate) — right after the commit succeeds and before any spawn or restart.
+  - `--deep` is deprecated on recent macOS and some versions reject it outright, so a failure falls back to signing only the outer bundle.
+  - A failed re-sign **throws and rolls back** to the pre-swap directory: leaving a broken-signature app is worse than failing outright. The error message includes the `codesign` command you can run by hand.
+  - On Windows / Linux `needsResign()` is false, so the whole block is skipped with zero side effects.
+  - Stated plainly: I have no Mac to test this path. Guards, error semantics and path parsing are unit-tested, but real-machine behaviour needs one verification on your side.
+- **README desktop platform note**: all three READMEs now say the desktop path is only verified on Windows, and describe the macOS re-sign behaviour plus how to confirm it on first use.
+
 # 1.1.76
 
 ## 中文
