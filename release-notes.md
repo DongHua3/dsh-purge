@@ -1,3 +1,41 @@
+# 1.1.74
+
+## 中文
+
+- 版本 **1.1.74**，适配 DSH **0.2.1-rc.2**（0.2.0 仍可用）。
+- **修 `Apply` 毁掉 npm 全局 `dsh` 软链**（`lib/core.js`）：`patchShim` 原本直接对 `bin/dsh` 做 tmp+rename，而 `rename` 会替换软链本身，把指向 `@deepseek-ai/dsh/lib/bin.js` 的链接变成一份独立副本。官方一升级，这份副本就与包内真实文件脱钩，`dsh` 命令报模块找不到。
+  - 新增 `resolveShimWriteTarget()`：软链先 `realpathSync` 落到真实目标再写，链接本身不动。
+  - 被旧版本复制成普通文件的启动器（内容含 `@deepseek-ai/dsh-app-boot` 且向上解析不到模块根）由 `healCopiedLauncher()` 重建成相对软链，再写官方文件；重建不了则 `skipped_no_module_root` 跳过，不再产出永远跑不起来的死副本。
+  - `revertShim` 同步解软链，`shimBackupPath` / `shimIsPatched` 不再认错文件。
+  - `revertShim` 顺带修一处误报：注入块未闭合时 `stripShimInject` 原样返回，旧代码仍报 `stripped_inject`，现在回报 `strip_failed_unclosed_block` 且不覆盖文件。
+- **修原子写吃掉文件权限**（`lib/core.js` / `lib/desktop.js`）：`atomicWriteSync` / `atomicWriteFile` 写前记录原文件权限、`rename` 前补到临时文件，避免 0755 的 `dsh` 被写成 0644 后 `Permission denied`。`repairOfficialCliAfterUnpack` 对非 `.cmd` 启动脚本显式补 `chmod 0755`，修已经被写坏过权限的机器。
+- **修 `already queued: dsh-purge`**（`cordis.patch.yml`）：本体已在 `profile.bundles` 入队，bundle patch 里又 `insert` 了一份同 id，Hub 市场一键装与 `dsh plugin add` 都会撞上。现在只保留 `- id: dsh-purge` 一处（承载 `inject` 与 `config`），`insert` 只留三个 redteam 子项。
+- **修云元数据地址可被当成内网靶场**（`lib/net-scope.js`）：`169.254.0.0/16` 原被 `isSkippedV4` 判为内网放行，而它是 AWS / GCP / Azure 的元数据端点（`169.254.169.254`），一句 `curl` 就能读走 IAM 凭证。新增 `isMetadataAddress()`，在 `isIp()` 放行之前独立拦截，覆盖 `::ffff:169.254.169.254`、`::ffff:a9fe:a9fe` 等写法。
+- **修 `::ffff:` 公网地址穿透门禁**（`lib/net-scope.js`）：`parseIpv6` 未拆 IPv4-mapped，`::ffff:8.8.8.8` 走 `isOwnNetwork` 返回 false、却被 `isIp()` 的 `includes(":")` 当成普通 IP 放行。现在按映射后的 IPv4 重新判定。
+- **修停用/卸载后无法新建会话（#108）**（`lib/preset-default.js` 等）：热重载是 dispose → apply 连着跑，旧代码在 dispose 里同步把 `selectedDefault` 清成 `standard`，会冲掉用户自己选的红队默认；而真卸载时若清理失败，`selectedDefault` 又卡在 `redteam`、预设目录已被删，宿主 `resolve()` 对未知预设硬抛，新会话直接失败。
+  - 新增 `scheduleClearOwnedSelectedDefault()`（800ms 延迟）与 `cancelClearOwnedSelectedDefault()`：dispose 只排队，apply 一进来就取消，只有真停用才让定时器跑完。
+  - `index.js` / `redteam/index.js` 的 disposer 改走延迟清；`uninstall.js` 先 cancel 再同步清干净。
+  - `listProfilePatchFiles` 同时扫 `profiles/*/cordis.yml`，不再只认 `cordis.patch.yml`。
+- **修 README 安装入口指错仓库**：`dsh://` 一键安装深链、`master.tar.gz` 下载地址、徽章与 Releases 链接此前仍指向 `YuJunZhiXue/dsh-purge`，会把人装到另一条发布线上；现全部改指本仓库，版本号同步到 1.1.74。署名与来源段落保持不变。
+
+## English
+
+- **1.1.74**, target DSH **0.2.1-rc.2** (0.2.0 still works).
+- **Fix `Apply` destroying the npm global `dsh` symlink** (`lib/core.js`): `patchShim` wrote `bin/dsh` via tmp+rename, and `rename` replaces the symlink itself, turning the link into `@deepseek-ai/dsh/lib/bin.js` into a standalone copy. After an official upgrade that copy no longer matches the package and `dsh` fails to resolve modules.
+  - New `resolveShimWriteTarget()`: a symlink is resolved with `realpathSync` and the real target is written; the link stays a link.
+  - A launcher already flattened into a plain copy (content references `@deepseek-ai/dsh-app-boot` and no module root is reachable upward) is rebuilt into a relative symlink by `healCopiedLauncher()` before writing; if it cannot be rebuilt the file is skipped as `skipped_no_module_root` instead of producing a dead copy.
+  - `revertShim` resolves symlinks too, so `shimBackupPath` / `shimIsPatched` stop looking at the wrong file.
+  - `revertShim` also stops a false positive: when the injected block is unclosed, `stripShimInject` returns the text unchanged, and the old code still reported `stripped_inject`; it now reports `strip_failed_unclosed_block` and leaves the file alone.
+- **Fix atomic writes dropping file mode** (`lib/core.js` / `lib/desktop.js`): `atomicWriteSync` / `atomicWriteFile` record the original mode and apply it to the temp file before `rename`, so a 0755 `dsh` no longer becomes 0644 and fails with `Permission denied`. `repairOfficialCliAfterUnpack` now explicitly `chmod 0755` non-`.cmd` launchers, repairing machines already damaged.
+- **Fix `already queued: dsh-purge`** (`cordis.patch.yml`): the plugin is already queued via `profile.bundles`, and the bundle patch inserted a second entry with the same id, which broke Hub one-click install and `dsh plugin add`. Only `- id: dsh-purge` remains (carrying `inject` and `config`); `insert` keeps just the three redteam children.
+- **Fix cloud metadata endpoints being treated as lab targets** (`lib/net-scope.js`): `169.254.0.0/16` was allowed by `isSkippedV4` as "internal", but that is the AWS / GCP / Azure metadata range (`169.254.169.254`), where one `curl` reads IAM credentials. New `isMetadataAddress()` blocks it before the `isIp()` allow path and covers `::ffff:169.254.169.254` and `::ffff:a9fe:a9fe`.
+- **Fix `::ffff:` public addresses slipping through the gate** (`lib/net-scope.js`): `parseIpv6` did not unwrap IPv4-mapped addresses, so `::ffff:8.8.8.8` returned false from `isOwnNetwork` yet passed `isIp()`'s `includes(":")`. It is now re-judged as the mapped IPv4.
+- **Fix new sessions failing after disable/uninstall (#108)** (`lib/preset-default.js` and call sites): hot reload is dispose → apply back to back, and the old code synchronously reset `selectedDefault` to `standard` on dispose, clobbering the user's chosen redteam default; on a real uninstall, if clearing failed, `selectedDefault` stayed on `redteam` while the preset directory was already gone, and the host throws on unknown presets, so new sessions failed outright.
+  - New `scheduleClearOwnedSelectedDefault()` (800 ms delay) and `cancelClearOwnedSelectedDefault()`: dispose only queues, apply cancels, and only a real disable lets the timer fire.
+  - `index.js` / `redteam/index.js` disposers use the deferred clear; `uninstall.js` cancels first and then clears synchronously.
+  - `listProfilePatchFiles` also scans `profiles/*/cordis.yml`, not just `cordis.patch.yml`.
+- **Fix README install entry points pointing at the wrong repository**: the `dsh://` one-click link, the `master.tar.gz` URL, badges and Releases links still targeted `YuJunZhiXue/dsh-purge` and would install the other release line. All now point here, with the version bumped to 1.1.74. Attribution stays unchanged.
+
 # 1.1.73
 
 ## 中文
