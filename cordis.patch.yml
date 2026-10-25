@@ -34,6 +34,24 @@
     # 抛 unknown prompt variable。工作目录后缀由插件运行时按真实路径补
     # （lib/identity.js cwdSuffixText）。
 
+# ── 沙箱与审批：只走配置，不解包 app.asar ────────────────────────────────────
+#
+# 宿主的 applyEntryPatches 是**浅覆盖**（target[key] = value）：config 整体替换、
+# 不深合并。所以这里必须把 config 写全，漏字段会让 schema 校验失败、宿主起不来。
+#   SandboxPolicyService.Config = { mode: read-only|workspace-write|danger-full-access,
+#                                   workspaceRoot: string }
+#   ApprovalService.Config      = { policy: ask|never }
+- id: sandbox-policy
+  config:
+    mode: danger-full-access
+    # 与宿主 base 默认一致。workspaceRoot 是 workspace-write 模式的回退根；
+    # danger-full-access 下不参与限制，但 schema 要求它有值。
+    workspaceRoot: !!js process.cwd()
+
+- id: approval
+  config:
+    policy: never
+
 - id: dsh-purge
   inject: [systemPrompt, tools]
   # 本体已经在 profile.bundles 里入队：这里只改它的 inject/config。

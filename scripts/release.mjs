@@ -121,9 +121,11 @@ info("将执行：");
 info(`  1) git push origin master${Number(ahead) > 0 ? `   (${ahead} 个新 commit)` : "   (已是最新)"}`);
 if (!NO_TAG) {
   info(`  2) git tag -a ${tag} -m "${tag}"   →  ${headSha.slice(0, 7)}`);
-  info(`  3) git push origin ${tag}          →  触发 CI 发 Release`);
+  info(`  3) git push origin ${tag}`);
+  info(`  4) 调 workflow_dispatch 触发 CI（本仓库 push 事件不触发，见文件头说明）`);
+  info(`  5) 轮询 Release 直到出现`);
 } else {
-  info(`  2) (跳过 tag)`);
+  info(`  2) (跳过 tag 与 CI)`);
 }
 info("");
 
@@ -148,12 +150,89 @@ if (!tagExists) {
 }
 info(`→ push ${tag}`);
 git(["push", "origin", tag], { inherit: true });
-ok(`${tag} 已推送，CI 应已触发`);
+ok(`${tag} 已推送`);
 
-info("");
-info(`${C.green}完成。${C.reset} 稍后确认：`);
-info(`  https://github.com/DongHua3/dsh-purge/actions`);
-info(`  https://github.com/DongHua3/dsh-purge/releases/tag/${tag}`);
-info("");
-info(`${C.dim}若 CI 仍未触发（branch/tag 事件都没注册），去 Actions 页面手动 Run workflow：${C.reset}`);
-info(`  https://github.com/DongHua3/dsh-purge/actions/workflows/release.yml`);
+// ---------- 6. 触发 CI 并等待 ----------
+// 本仓库的 push 事件（branch 与 tag）在 GitHub Actions 侧都没注册成功，
+// 只有 workflow_dispatch 有效，所以这里显式调一次 API。
+const REPO = "DongHua3/dsh-purge";
+const WORKFLOW_ID = "393558246";
+
+function ghToken() {
+  // 优先环境变量，其次 git credential fill（本机 GCM 里已有）
+  if (process.env.GH_TOKEN) return process.env.GH_TOKEN;
+  try {
+    const out = execFileSync("git", ["credential", "fill"], {
+      input: "protocol=https\nhost=github.com\n\n",
+      encoding: "utf8",
+    });
+    const m = /^password=(.+)$/m.exec(out);
+    return m ? m[1].trim() : "";
+  } catch {
+    return "";
+  }
+}
+
+const token = ghToken();
+if (!token) {
+  warn("拿不到 GitHub token，跳过自动触发。请到 Actions 页面手动 Run workflow。");
+  info(`  https://github.com/${REPO}/actions/workflows/release.yml`);
+  process.exit(0);
+}
+
+async function gh(path, init = {}) {
+  const res = await fetch(`https://api.github.com${path}`, {
+    ...init,
+    headers: {
+      authorization: `Bearer ${token}`,
+      accept: "application/vnd.github+json",
+      "content-type": "application/json",
+      "user-agent": "dsh-purge-release",
+      ...(init.headers || {}),
+    },
+  });
+  return res;
+}
+
+info("→ workflow_dispatch");
+{
+  const res = await gh(`/repos/${REPO}/actions/workflows/${WORKFLOW_ID}/dispatches`, {
+    method: "POST",
+    body: JSON.stringify({ ref: "master" }),
+  });
+  if (res.status !== 204) {
+    warn(`dispatch 返回 HTTP ${res.status}，请手动触发。`);
+    info(`  https://github.com/${REPO}/actions/workflows/release.yml`);
+    process.exit(0);
+  }
+  ok("CI 已触发");
+}
+
+info("→ 等待 Release 出现（最多 5 分钟）");
+let release = null;
+for (let i = 0; i < 30; i += 1) {
+  await new Promise((r) => setTimeout(r, 10000));
+  const res = await gh(`/repos/${REPO}/releases/tags/${tag}`);
+  if (res.status === 200) {
+    release = await res.json();
+    break;
+  }
+  process.stdout.write(".");
+}
+process.stdout.write("\n");
+
+if (!release) {
+  warn("5 分钟内没等到 Release。CI 可能仍在跑或失败：");
+  info(`  https://github.com/${REPO}/actions`);
+  process.exit(1);
+}
+
+const assets = release.assets || [];
+ok(`Release 已生成: ${release.html_url}`);
+info(`  资产: ${assets.map((a) => `${a.name} (${a.size}B)`).join(", ") || "(无)"}`);
+info(`  正文: ${(release.body || "").length} 字符，首行 "${(release.body || "").split("\n")[0]}"`);
+
+if (!assets.length) {
+  warn("Release 里没有资产，检查 CI 的 upload 步骤。");
+}
+

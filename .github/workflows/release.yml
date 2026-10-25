@@ -1,15 +1,17 @@
 name: Release
 
+# 触发方式说明（实测结论，2026-10）：
+#   本仓库的 push 事件（branch 和 tag 都试过）在 GitHub Actions 侧从未注册成功
+#   —— workflow 文件在 master 上、state=active、allowed_actions=all，但
+#   actions/runs 恒为 0，workflow.updated_at 也不随文件变更刷新。
+#   唯一有效的是 workflow_dispatch。`scripts/release.mjs` 会调这个 API 触发。
+#   push 触发器保留只是为了让「万一哪天 GitHub 修好了」能自动发版，不依赖它。
 on:
   push:
     branches:
       - master
-    # tag push 也触发：本仓库的 branch push 事件在 Actions 侧没有注册成功
-    # （建仓时历史被重写，runs 一直为 0），tag 推送是另一条独立事件。
     tags:
       - "v*"
-  # 手动补发：push 触发没生效、或需要重发某一版时用。
-  # 走同一个 publish 步骤，幂等（已有同 tag 的 release 会 edit + 覆盖资产）。
   workflow_dispatch:
 
 permissions:

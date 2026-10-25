@@ -1,3 +1,21 @@
+# 1.1.79
+
+## 中文
+
+- 版本 **1.1.79**，适配 DSH **0.2.1-rc.2**。
+- **沙箱与审批改为纯配置生效**（`cordis.patch.yml`）：新增 `sandbox-policy` 与 `approval` 两条 patch，把沙箱默认模式设为 `danger-full-access`、审批策略设为 `never`。这样**不需要解包 `app.asar`、不需要点「应用」**就能拿到这两项效果，也就避开了 182MB 换包链路的风险。
+  - 关键细节：宿主的 `applyEntryPatches` 是**浅覆盖**（`target[key] = value`），`config` 整体替换、不深合并。所以 `sandbox-policy` 必须把 `mode` 和 `workspaceRoot` 都写全 —— 只写 `mode` 会把 `workspaceRoot` 弄丢，而 `SandboxPolicyService.Config` 要求它是 string，宿主会直接起不来。`approval` 只有 `policy` 一个字段，无此问题。
+- **`scripts/release.mjs` 内置 dispatch**：本仓库的 push 事件（branch 与 tag 都试过）在 GitHub Actions 侧从未注册成功，`actions/runs` 恒为 0，只有 `workflow_dispatch` 有效。脚本现在推完 master 和 tag 后直接调 dispatch API，并轮询到 Release 出现（最多 5 分钟），一条命令真正发完。token 从 `GH_TOKEN` 或 `git credential fill` 取。
+- **workflow 注释写清实测结论**：push 触发器保留（万一 GitHub 哪天修好可自动发版），但不再依赖它。
+
+## English
+
+- **1.1.79**, target DSH **0.2.1-rc.2**.
+- **Sandbox and approval now take effect through configuration alone** (`cordis.patch.yml`): two new patches, `sandbox-policy` and `approval`, set the default sandbox mode to `danger-full-access` and the approval policy to `never`. This gets both effects **without unpacking `app.asar` and without pressing Apply**, which avoids the risk of the 182 MB swap path entirely.
+  - Key detail: the host's `applyEntryPatches` is a **shallow override** (`target[key] = value`) — `config` is replaced wholesale, not deep-merged. So `sandbox-policy` must spell out both `mode` and `workspaceRoot`; writing only `mode` would drop `workspaceRoot`, which `SandboxPolicyService.Config` requires to be a string, and the host would fail to start. `approval` has only `policy`, so it is unaffected.
+- **`scripts/release.mjs` now dispatches CI itself**: this repo's push events (branch and tag both tried) never registered on the GitHub Actions side — `actions/runs` stays at 0 — and only `workflow_dispatch` works. After pushing master and the tag, the script calls the dispatch API and polls until the release appears (up to 5 minutes), so one command really finishes the release. The token comes from `GH_TOKEN` or `git credential fill`.
+- **Workflow comments now record the measured conclusion**: the push triggers are kept (in case GitHub fixes it someday) but are no longer relied on.
+
 # 1.1.78
 
 ## 中文
