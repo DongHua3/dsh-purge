@@ -4,7 +4,7 @@
 
 <h1 align="center">⚔️ DeepSeek Harness cybersecurity red-team tool (dsh-purge)</h1>
 
-<p align="center"><strong>Version 1.1.76</strong></p>
+<p align="center"><strong>Version 1.1.77</strong></p>
 
 <p align="center">
   <em>DeepSeek Harness jailbreak: every model, swap prompts per model. Default prompt for 小码酱. Please star ⭐ If you build on this, see Attribution required.</em>
@@ -29,13 +29,15 @@
   <a href="README.md">中文</a> · <a href="README.en.md"><strong>English</strong></a>
 </p>
 
-> **This line is actively maintained.** Current version **1.1.76** (see [Releases](https://github.com/DongHua3/dsh-purge/releases)), targeting DSH **0.2.1-rc.2**.
+> **This line is actively maintained.** Current version **1.1.77** (see [Releases](https://github.com/DongHua3/dsh-purge/releases)), targeting DSH **0.2.1-rc.2**.
 >
 > This line is for local, single-operator use: patch engine, desktop app swap, session gate. It ships no skill library and no knowledge base, and it does not promise to follow every new dsh release.
 >
 > This has always been an after-hours project. If it helped you, the [sponsor](#sponsor) addresses are below. README [ad slots](#ad) are also open, to help keep the lights on.
 
 > **Official Web and the official desktop app are both supported.** Official `dsh web` uses profile `web`. The official desktop EXE (DeepSeek Harness **0.2.1-rc.2**) uses profile `desktop`. Install and Apply them separately. This release targets dsh 0.2 only. Older dsh builds need the matching older plugin. Community Desktop is not maintained.
+>
+> **The desktop path is only verified on Windows.** On macOS the official bundle is signed, and unpacking `Contents/Resources/app.asar` invalidates that signature so the app will not launch. Since 1.1.77 the swap is followed by an automatic `codesign --force --deep --sign -` re-sign (ad-hoc, no certificate needed); if re-signing fails it rolls back to the pre-swap state and reports the error rather than leaving a broken app. I have no Mac to test this path, so on first use run `codesign -dv <app>` in a terminal and check the result.
 >
 > Adding the plugin to a profile does not patch the host. Click **dsh-purge** beside the session title → **Clean** → **Apply**. A successful Apply restarts; an unfinished Apply does not. After the restart, start a new chat — that is when the inject enters the session.
 >
@@ -213,7 +215,7 @@ Hub one-click on [dsh-plugin.org](https://dsh-plugin.org/plugins/yujunzhixue/dsh
 For the desktop client you can also click the button (`dsh://` deep link):
 
 <p align="center">
-  <a href="dsh://plugin/install?id=dsh-purge&name=dsh-purge&version=1.1.76&repo=DongHua3%2Fdsh-purge&permissions=%E7%B3%BB%E7%BB%9F%E6%8F%90%E7%A4%BA%E8%AF%8D%E6%B3%A8%E5%85%A5%2C%E6%9C%AC%E6%9C%BA%E8%A1%A5%E4%B8%81%2C%E8%AE%BE%E7%BD%AE%E9%A1%B5&downloadUrl=https%3A%2F%2Fgithub.com%2FDongHua3%2Fdsh-purge%2Farchive%2Frefs%2Fheads%2Fmaster.tar.gz"><strong>Install in desktop client</strong></a>
+  <a href="dsh://plugin/install?id=dsh-purge&name=dsh-purge&version=1.1.77&repo=DongHua3%2Fdsh-purge&permissions=%E7%B3%BB%E7%BB%9F%E6%8F%90%E7%A4%BA%E8%AF%8D%E6%B3%A8%E5%85%A5%2C%E6%9C%AC%E6%9C%BA%E8%A1%A5%E4%B8%81%2C%E8%AE%BE%E7%BD%AE%E9%A1%B5&downloadUrl=https%3A%2F%2Fgithub.com%2FDongHua3%2Fdsh-purge%2Farchive%2Frefs%2Fheads%2Fmaster.tar.gz"><strong>Install in desktop client</strong></a>
 </p>
 
 ### After the command: three steps
