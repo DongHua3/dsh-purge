@@ -1,3 +1,23 @@
+# 1.1.75
+
+## 中文
+
+- 版本 **1.1.75**，适配 DSH **0.2.1-rc.2**（0.2.0 仍可用）。这一版只改会话门禁（`lib/net-scope.js`）与红队预设自愈，不动补丁引擎。
+- **修长文门禁可被绕过**：旧逻辑对超过 100KB 的消息直接 `slice(0, 100KB)` 再判，目标写在 100KB 之后就完全不检查。现在改成开窗扫描——窗口 8K、步进 7K（重叠 1K，跨窗边界的句子也命中），起点扫到 256KB，末窗自然多覆盖一个窗口宽。窗口内仍是完整正则，判定语义不变。
+- **修后续步骤漏拦**：`agent/pre-step` 原先只在 `step === 1` 检查用户句。红队任务通常是第 3、4 步才真正发包，那时用户句已经不在新消息里，目标只剩工具参数——门等于只开在第一步。现在 step≥2 会扫最近若干条 assistant 消息的工具入参；`parkDenial` 也从「只认 step 1」放宽到 `step ≥ 1`，否则后续步骤命中后只会静默放行、写不出禁止句。
+- **新增工具级兜底**（`tools/pre-execute`）：真正发包前的工具参数再查一次。按宿主真实契约返回 `{ kind: 'deny', reason }`（`PreToolDecision`），而不是自定义对象——后者不是合法 decision，会被当成上游结果继续往下走。
+- **修 `toolFilter` 自愈不彻底**（`lib/redteam/index.js`）：旧实现用一条正则剥旧预设，只认 `deny:` 单行 + `- item` 两种子形态，遇到 `allow:` 列表或 `toolFilter: { deny: [a, b] }` 这种同行 flow 数组会原样残留，预设仍然 register 失败。改成按缩进逐行削块，四种形态都能清干净。
+- **门禁策略说明（避免误伤）**：本插件允许直接打公网 IP，所以工具层的 IP 字面量默认**不拦**——否则 `ping 8.8.8.8`、`curl 1.1.1.1`、`ssh 1.2.3.4` 这类日常命令会被一并打断。工具层始终拦三样：云元数据地址（`169.254.0.0/16` 及其 `::ffff:` 写法）、CN/HK/MO 域名、银行域名。只有在会话已被判定为攻击/红队、或后续步骤确认时，才把 IP 字面量一起拦（`blockIpLiteral`）。
+
+## English
+
+- **1.1.75**, target DSH **0.2.1-rc.2** (0.2.0 still works). This release only touches the session gate (`lib/net-scope.js`) and redteam preset self-healing; the patch engine is unchanged.
+- **Fix a bypass in the long-message gate**: the old code sliced anything over 100 KB down to 100 KB before testing, so a target written past that point was never inspected. It now scans in windows — 8 KB window, 7 KB hop (1 KB overlap, so sentences straddling a boundary still match), from 0 up to 256 KB, with the last window naturally covering one extra window width. The regex inside each window is unchanged, so decisions are equivalent.
+- **Fix later steps being skipped**: `agent/pre-step` only checked the user sentence at `step === 1`. Red-team runs usually fire the real request on step 3 or 4, where the user sentence is no longer in the new messages and the target only exists in tool arguments — the gate was effectively open after the first step. Step ≥ 2 now scans tool arguments from the recent assistant messages, and `parkDenial` was relaxed from "step 1 only" to `step ≥ 1`; otherwise a later hit would only be silently forwarded with no denial ever written.
+- **New tool-level backstop** (`tools/pre-execute`): tool arguments are checked again right before dispatch. It returns `{ kind: 'deny', reason }` per the host's actual `PreToolDecision` contract — a custom object is not a valid decision and would be treated as the upstream result and allowed through.
+- **Fix incomplete `toolFilter` self-healing** (`lib/redteam/index.js`): the old implementation stripped old presets with one regex that only recognized `deny:` plus `- item` children, so an `allow:` list or an inline `toolFilter: { deny: [a, b] }` survived and the preset still failed to register. It now walks lines by indentation and clears all four shapes.
+- **Gate policy note (to avoid collateral)**: this plugin allows hitting public IPs directly, so the tool layer does **not** block IP literals by default — otherwise `ping 8.8.8.8`, `curl 1.1.1.1`, `ssh 1.2.3.4` and similar daily commands would break too. The tool layer always blocks three things: cloud metadata addresses (`169.254.0.0/16` and its `::ffff:` forms), CN/HK/MO domains, and bank domains. IP literals are additionally blocked (`blockIpLiteral`) only when the session is already known to be an attack/redteam run or a later step confirms it.
+
 # 1.1.74
 
 ## 中文
