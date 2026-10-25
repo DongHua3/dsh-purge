@@ -37,11 +37,14 @@ const warn = (m) => console.log(`${C.yellow}!${C.reset} ${m}`);
 const die = (m) => { console.error(`${C.red}✗ ${m}${C.reset}`); process.exit(1); };
 
 function git(args, opts = {}) {
-  return execFileSync("git", args, { encoding: "utf8", stdio: opts.inherit ? "inherit" : "pipe", ...opts }).trim();
+  // stdio: "inherit" 时 execFileSync 返回 null，不能无条件 .trim()
+  const out = execFileSync("git", args, { encoding: "utf8", stdio: opts.inherit ? "inherit" : "pipe", ...opts });
+  return out == null ? "" : String(out).trim();
 }
 
 function sh(cmd, args, opts = {}) {
-  return execFileSync(cmd, args, { encoding: "utf8", stdio: opts.inherit ? "inherit" : "pipe", ...opts }).trim();
+  const out = execFileSync(cmd, args, { encoding: "utf8", stdio: opts.inherit ? "inherit" : "pipe", ...opts });
+  return out == null ? "" : String(out).trim();
 }
 
 // ---------- 1. 前置校验 ----------
