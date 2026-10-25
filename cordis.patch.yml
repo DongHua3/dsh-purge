@@ -36,29 +36,27 @@
 
 - id: dsh-purge
   inject: [systemPrompt, tools]
+  # 本体已经在 profile.bundles 里入队：这里只改它的 inject/config。
+  # 再 insert 一次会 already queued: dsh-purge（Hub 市场一键装就是这么挂的，#152 / #154）。
+  config:
+    enabled: true
+    autoApplyOnStart: false
+    autoUpdateOnStart: false
+    autoRevertOnMissing: false
+    injectOnce: false
+    stripMnemon: true
+    verbose: false
+    postPrompt: ""
+    postPromptOrder: 5100
+    autoRetry: true
+    retryMax: 3
+    autoContinue: false
+    continueMax: 3
+    continueText: "继续"
+    capabilityProtocol: true
+    hooksDenyBypass: true
 
 - insert:
-    - id: dsh-purge
-      name: 'dsh-purge'
-      inject: [systemPrompt, tools]
-      config:
-        enabled: true
-        autoApplyOnStart: false
-        autoUpdateOnStart: false
-        autoRevertOnMissing: false
-        injectOnce: false
-        stripMnemon: true
-        verbose: false
-        postPrompt: ""
-        postPromptOrder: 5100
-        autoRetry: true
-        retryMax: 3
-        autoContinue: false
-        continueMax: 3
-        continueText: "继续"
-        capabilityProtocol: true
-        hooksDenyBypass: true
-
     # 演练台：预设 + 技能落地（本插件 lib/redteam）
     - id: dsh-purge-redteam
       name: dsh-purge/redteam
