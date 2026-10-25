@@ -1,3 +1,21 @@
+# 1.1.78
+
+## 中文
+
+- 版本 **1.1.78**，适配 DSH **0.2.1-rc.2**。这一版是发布工具链，不动运行时逻辑。
+- **修 CI 的 tag 触发**（`.github/workflows/release.yml`）：本仓库的 branch push 事件在 Actions 侧从未注册成功（建仓时历史被重写，`actions/runs` 一直是 0），所以每版都得手动 dispatch。现在 workflow 同时监听 `v*` tag 推送 —— 这是另一条独立事件，不受 branch 事件失效影响。
+- **修「tag 已存在但没有 release」的分支**：原来只有 `gh release view` 成功/失败两条路。若 tag 已存在（比如先手动打了 tag 再跑 workflow），`release view` 会失败、走 `release create --target`，而 GitHub 对已存在的 tag 会直接报错。现在先探测 `refs/tags/<tag>`，存在就 `release create` 不带 `--target`。
+- **新增 `scripts/release.mjs`**：一条命令完成发布。校验（在 master、工作区干净、版本与 release-notes 首行一致、不落后远端、语法与 import 冒烟、notes 只含当前版）→ push master → 打 annotated tag → 推 tag 触发 CI。`--dry-run` 只校验并打印计划；`--no-tag` 只推 master。任何一步失败立即停止，tag 指向不一致时拒绝覆盖。
+- **新增 `scripts/prune-orphan-backups.mjs`**：清理 `$DSH_HOME/dsh-purge/host-backups/` 里指向已消失路径的孤儿备份。默认 dry-run，`--apply` 才删，删除前把清单写到同目录 `manifest-orphans-<ts>.txt`。判定为孤儿需同时满足：`.json` 可解析、有 `path` 字段、且该路径 `existsSync` 为 false；解析失败或缺字段的一律保留。
+
+## English
+
+- **1.1.78**, target DSH **0.2.1-rc.2**. Release tooling only; runtime logic is unchanged.
+- **Fix CI tag triggering** (`.github/workflows/release.yml`): this repo's branch push event never registered on the Actions side (the history was rewritten when the repo was created, so `actions/runs` stayed at 0), which meant every release needed a manual dispatch. The workflow now also listens for `v*` tag pushes — a separate event that is unaffected by the broken branch event.
+- **Fix the "tag exists but no release" branch**: previously there were only two paths, `gh release view` succeeding or failing. If the tag already existed (e.g. tag pushed first, workflow run after), `release view` failed and it fell through to `release create --target`, which GitHub rejects for an existing tag. It now probes `refs/tags/<tag>` first and creates the release without `--target` when the tag is already there.
+- **New `scripts/release.mjs`**: one command to publish. Validates (on master, clean tree, version matches the first line of release-notes, not behind origin, syntax plus import smoke test, notes contain only the current version) → push master → create an annotated tag → push the tag to trigger CI. `--dry-run` only validates and prints the plan; `--no-tag` pushes master alone. Any failure stops immediately, and a tag pointing at a different commit is refused rather than overwritten.
+- **New `scripts/prune-orphan-backups.mjs`**: removes orphaned backups in `$DSH_HOME/dsh-purge/host-backups/` whose targets no longer exist. Dry-run by default; `--apply` deletes, writing a `manifest-orphans-<ts>.txt` manifest alongside first. A backup counts as orphaned only when its `.json` parses, has a `path`, and that path fails `existsSync`; unparsable or field-less entries are always kept.
+
 # 1.1.77
 
 ## 中文

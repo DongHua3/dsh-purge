@@ -4,7 +4,7 @@
 
 <h1 align="center">⚔️ DeepSeek Harness 网络安全红队工具（dsh-purge）</h1>
 
-<p align="center"><strong>Version 1.1.77</strong></p>
+<p align="center"><strong>Version 1.1.78</strong></p>
 
 <p align="center">
   <em>DeepSeek Harness 破甲：让所有模型都能破甲，不同模型可换不同提示词；默认提示词面向国模「小码酱」。Jailbreak for every model — swap prompts per model. 求 Star 收藏 ⭐ 如要二开，请查看署名要求部分</em>
@@ -29,7 +29,7 @@
   <a href="README.md"><strong>中文</strong></a> · <a href="README.en.md">English</a>
 </p>
 
-> **本线持续维护中。** 当前版本 **1.1.77**（见 [Releases](https://github.com/DongHua3/dsh-purge/releases)），适配 DSH **0.2.1-rc.2**。
+> **本线持续维护中。** 当前版本 **1.1.78**（见 [Releases](https://github.com/DongHua3/dsh-purge/releases)），适配 DSH **0.2.1-rc.2**。
 >
 > 这条线只做**本地自用**：补丁引擎、桌面端换包、会话门禁。不含技能库与知识库，仓库也不对外承诺跟进每一个新版 dsh。
 >
@@ -215,7 +215,7 @@ dsh plugin --profile desktop add dsh-purge
 桌面客户端也可以点按钮（`dsh://` 唤起）：
 
 <p align="center">
-  <a href="dsh://plugin/install?id=dsh-purge&name=dsh-purge&version=1.1.77&repo=DongHua3%2Fdsh-purge&permissions=%E7%B3%BB%E7%BB%9F%E6%8F%90%E7%A4%BA%E8%AF%8D%E6%B3%A8%E5%85%A5%2C%E6%9C%AC%E6%9C%BA%E8%A1%A5%E4%B8%81%2C%E8%AE%BE%E7%BD%AE%E9%A1%B5&downloadUrl=https%3A%2F%2Fgithub.com%2FDongHua3%2Fdsh-purge%2Farchive%2Frefs%2Fheads%2Fmaster.tar.gz"><strong>唤起客户端一键安装</strong></a>
+  <a href="dsh://plugin/install?id=dsh-purge&name=dsh-purge&version=1.1.78&repo=DongHua3%2Fdsh-purge&permissions=%E7%B3%BB%E7%BB%9F%E6%8F%90%E7%A4%BA%E8%AF%8D%E6%B3%A8%E5%85%A5%2C%E6%9C%AC%E6%9C%BA%E8%A1%A5%E4%B8%81%2C%E8%AE%BE%E7%BD%AE%E9%A1%B5&downloadUrl=https%3A%2F%2Fgithub.com%2FDongHua3%2Fdsh-purge%2Farchive%2Frefs%2Fheads%2Fmaster.tar.gz"><strong>唤起客户端一键安装</strong></a>
 </p>
 
 ### 装完都要做这三步
