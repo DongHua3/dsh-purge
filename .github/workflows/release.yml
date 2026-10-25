@@ -4,6 +4,9 @@ on:
   push:
     branches:
       - master
+  # 手动补发：push 触发没生效、或需要重发某一版时用。
+  # 走同一个 publish 步骤，幂等（已有同 tag 的 release 会 edit + 覆盖资产）。
+  workflow_dispatch:
 
 permissions:
   contents: write
@@ -40,14 +43,26 @@ jobs:
             echo "release-notes.md 第一行必须是 # ${version}，现在是: ${first}"
             exit 1
           fi
+          # release-notes.md 是全量历史；release 正文只能放当前这一版，
+          # 否则每次发版都会把旧版本的说明一起贴进新 release。
+          notes="$(mktemp)"
+          V="$version" OUT="$notes" node -e '
+            const fs = require("node:fs");
+            const all = fs.readFileSync("release-notes.md", "utf8");
+            const parts = all.split(/\n(?=# 1\.1\.)/);
+            const mine = parts.find((p) => p.trimStart().startsWith(`# ${process.env.V}`));
+            if (!mine) { console.error("no notes for", process.env.V); process.exit(1); }
+            fs.writeFileSync(process.env.OUT, mine.trim() + "\n");
+          '
+          test -s "$notes"
           zip="dsh-purge-${version}.zip"
           git archive --format=zip --prefix="dsh-purge-${version}/" --output="$zip" HEAD
           test -s "$zip"
           if gh release view "$tag" >/dev/null 2>&1; then
-            gh release edit "$tag" --title "$tag" --notes-file release-notes.md
+            gh release edit "$tag" --title "$tag" --notes-file "$notes"
             gh release upload "$tag" "$zip" --clobber
           else
-            args=(release create "$tag" --target "$GITHUB_SHA" --title "$tag" --notes-file release-notes.md)
+            args=(release create "$tag" --target "$GITHUB_SHA" --title "$tag" --notes-file "$notes")
             case "$version" in
               *beta*|*alpha*|*rc*) args+=(--prerelease) ;;
             esac
