@@ -1,3 +1,29 @@
+# 1.1.76
+
+## 中文
+
+- 版本 **1.1.76**，适配 DSH **0.2.1-rc.2**。这一版是**还原路径**与**发布流程**的加固，不改门禁策略。
+- **修还原不是原子的**（`lib/core.js`）：`restoreFromBak` 原来直接 `copyFile(bak, fp)` 覆盖目标。中途崩溃或 EBUSY 会留下半截的 `dsh` 或 `lib/bin.js`——而 `dsh` 一旦半截就是「命令直接坏掉」，且此时备份还在但用户已经用不了。改成先写同目录临时文件再 `rename`，失败时备份不删、下次还能重试。
+- **修 `atomicCopyFile` 丢权限**（`lib/core.js`）：上一版给 `atomicWriteSync`/`atomicWriteFile` 补了权限保留，但 `atomicCopyFile` 漏了。还原场景正好走它，等于「修了写入、没修还原」——0755 的启动器还原回来会变 0644。现在目标已存在时沿用目标权限，否则继承源文件权限（cp 语义）。
+- **修 shim 回滚失败仍会删备份**（`lib/uninstall.js`）：`uninstallPurge` 在 patch 回滚失败时会提前 return 保留现场，但 shim 回滚失败只记一条 error 就继续往下走，而 `collectCleanupDirs()` 会把 `$DSH_HOME/dsh-purge` 整个 rm —— `shim-backups/` 就在它下面。备份一删，被打过补丁的 `dsh`/`dsh.ps1` 就再也还原不了，只能重装。现在两种失败同样中止并保留现场。
+  - 注意返回值是两层结构：`revertAllShims() → { "<shimDir>": { "dsh.ps1": "..." }, "_desktop_scrub": [...] }`，只查第一层会漏掉所有内层错误，实现里逐层摊平。
+  - 判定为失败的只有两类：写盘异常（`error:` 前缀）与注入块没剥掉（`strip_failed_unclosed_block`）。`reverted` / `stripped_inject` / `missing` / `no_backup` / `*_skipped_symlink` 都不算失败。
+- **修 Release 正文混入全部历史**（`.github/workflows/release.yml`）：`gh release edit/create --notes-file release-notes.md` 传的是**全量历史文件**，每次发版都会把旧版说明一起贴进新 release。现在先按 `# 1.1.x` 切出当前版本那一段再传。
+- **给 workflow 加 `workflow_dispatch`**：push 触发在部分历史被重写过的仓库上可能不生效，手动补发需要入口。发布步骤本身幂等（已有同 tag 会 `edit` + 覆盖资产）。
+- **README 去掉「暂时停更」声明**：三份 README 开头原本写着「暂不发新版本、暂不处理 issue / PR」，与现实不符（1.1.74、1.1.75 已发布）。改成「本线持续维护中」，并写明这条线只做本地自用、不含技能库与知识库、不承诺跟进每一个新版 dsh。
+
+## English
+
+- **1.1.76**, target DSH **0.2.1-rc.2**. This release hardens the **restore path** and the **release pipeline**; gate behaviour is unchanged.
+- **Fix non-atomic restore** (`lib/core.js`): `restoreFromBak` used a bare `copyFile(bak, fp)`. A crash or EBUSY mid-copy leaves a truncated `dsh` or `lib/bin.js`, and a truncated `dsh` means the command is simply broken — with the backup still present but unusable to the user. It now writes a temp file in the same directory and renames; on failure the backup is kept and can be retried.
+- **Fix `atomicCopyFile` dropping mode** (`lib/core.js`): the previous release preserved mode in `atomicWriteSync`/`atomicWriteFile` but missed `atomicCopyFile` — which is exactly what the restore path uses. A 0755 launcher came back as 0644. It now keeps the destination's mode when the file exists, otherwise inherits the source's (cp semantics).
+- **Fix uninstall deleting backups after a failed shim revert** (`lib/uninstall.js`): `uninstallPurge` already returned early when patch revert failed, but a shim revert failure only recorded an error and continued — and `collectCleanupDirs()` removes `$DSH_HOME/dsh-purge`, which contains `shim-backups/`. Deleting those makes a patched `dsh`/`dsh.ps1` unrecoverable short of a reinstall. Both failures now abort and preserve the scene.
+  - Note the return value is two levels deep: `revertAllShims() → { "<shimDir>": { "dsh.ps1": "..." }, "_desktop_scrub": [...] }`; checking only the first level misses every inner error, so the check flattens both.
+  - Only two shapes count as failures: write errors (`error:` prefix) and an unclosed injected block (`strip_failed_unclosed_block`). `reverted` / `stripped_inject` / `missing` / `no_backup` / `*_skipped_symlink` do not.
+- **Fix release body including all history** (`.github/workflows/release.yml`): `gh release edit/create --notes-file release-notes.md` was passed the full history file, so every release pasted all older notes into the new one. It now extracts only the current `# 1.1.x` section first.
+- **Add `workflow_dispatch` to the workflow**: push triggers can fail to register on repositories whose history was rewritten; manual re-publishing needs an entry point. The publish step is idempotent (an existing tag is edited and its asset overwritten).
+- **Remove the "maintenance paused" notice from README**: all three READMEs opened with "no new releases, issues/PRs not triaged", which contradicted reality (1.1.74 and 1.1.75 shipped). They now say the line is actively maintained, and state that it is for local single-operator use, ships no skill library or knowledge base, and does not promise to follow every new dsh release.
+
 # 1.1.75
 
 ## 中文
