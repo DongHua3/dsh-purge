@@ -1,3 +1,21 @@
+# 1.1.81
+
+## 中文
+
+- 版本 **1.1.81**，修复 Windows 官方桌面端升级接管（`official-update.wscript`）三处连环缺陷：
+  - **修 Bug 1（CWD 目录句柄占死导致升级 100% 回滚）**：`official-update.wscript` 启动后切走临时目录 CWD；`lib/core.js` 补丁 #45 计算 `launchCwd` 并在启动脚本中显式切目录，解除对宿主安装目录的句柄占用，解决 NSIS 安装器 `MoveFileExW` 报 `Windows error: 32` 退出码 `2` 回滚问题。同时新增补丁 #93（`OFFICIAL_DESKTOP_UPDATE_CWD`）支持原地升级已打补丁的桌面宿主。
+  - **修 Bug 2（NSIS 清理 `.old-{GUID}` 穿透误删新版 runtime）**：`official-update.wscript` 在更新前与解包前遍历摘除所有 `app.dshpurge-*\runtime` Junction 并在回滚时用 `mklink /J` 补回，防止 NSIS 递归清理旧目录时顺着 Junction 穿透删空新版 `resources\runtime\office-skills`（导致启动时报 `ENOENT: office/SKILL.md` 崩溃）。
+  - **修 Bug 3（升级后补丁自动回写死代码与换包不可达）**：`lib/index.js` `settleInstalledPatches` 优先放行 `dsh-purge-reapply-asar` 一次性标记，穿透 `autoApplyOnStart: false` 与 `sealed: true` 拦截，并调用 `restartSealedDesktopIfNeeded` 换走新版 `app.asar` 重启；修复新包二次全量解压性能损耗并确保前端 client bundle 补丁正常写入。
+- 自动化测试：在 `scripts/check-40-and-hostfs.mjs` 与 `scripts/test-official-update-rollback.mjs` 中补充 86 项端到端及全平台边界回归断言。
+
+## English
+
+- **1.1.81**: Fix three chained bugs during Windows official desktop client upgrade handoff (`official-update.wscript`):
+  - **Bug 1 (CWD directory lock causing 100% update rollback)**: Switch `official-update.wscript` CWD to `%TEMP%`; Patch #45 and new Patch #93 compute `launchCwd` and specify `/D` and `cwd` on spawn, preventing `MoveFileExW` Windows error 32.
+  - **Bug 2 (Junction traversal wiping newly installed runtime)**: Unlink `runtime` junctions across all `app.dshpurge-*` folders before running NSIS installer; recreate junction via `mklink /J` on rollback.
+  - **Bug 3 (Post-upgrade patch auto-reapply unreachable)**: Prioritize `dsh-purge-reapply-asar` marker in `settleInstalledPatches`, bypass `autoApplyOnStart: false` / `sealed: true` gates, swap `app.asar` and restart; prevent redundant asar extraction and ensure client bundle patches apply to fresh installs.
+- Regression tests: Add 86 automated assertions covering end-to-end upgrade scenarios and patch idempotency.
+
 # 1.1.80
 
 ## 中文
