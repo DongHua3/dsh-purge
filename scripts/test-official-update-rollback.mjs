@@ -354,6 +354,227 @@ async function main() {
   }
 
   // ─────────────────────────────────────────────────────────────
+  // ─────────────────────────────────────────────────────────────
+  console.log("\n[8] Bug 1 + Bug 2 端到端仿真：CWD=安装目录启动 + NSIS 重命名目录与穿链清理 .old-{GUID}");
+  {
+    const stage = path.join(root, "s8-nsis-e2e");
+    const installDir = path.join(stage, "DeepSeek Harness");
+    const resources = path.join(installDir, "resources");
+    const runtime = path.join(resources, "runtime");
+    const app = path.join(resources, "app");
+    const staleOld = path.join(resources, "app.dshpurge-old");
+    const fakeLaunchExe = path.join(stage, "fake", "DeepSeek Harness.exe");
+    const installedExe = path.join(installDir, "DeepSeek Harness.exe");
+    const oldBackupDir = installDir + ".old-89721CED";
+
+    fs.mkdirSync(app, { recursive: true });
+    fs.mkdirSync(staleOld, { recursive: true });
+    writeFile(path.join(resources, "app.asar.bak"), "v1-asar-bak");
+    for (const rel of OFFICE_SKILLS) writeFile(path.join(runtime, rel), `# v1 ${rel}\n` + "a".repeat(48));
+    writeFile(path.join(runtime, "manifest.json"), JSON.stringify({ version: 1, skills: OFFICE_SKILLS }));
+
+    // 同时布置当前 app\runtime 与历史残留 app.dshpurge-old\runtime 两个绝对路径 Junction
+    fs.symlinkSync(runtime, path.join(app, "runtime"), "junction");
+    writeFile(path.join(app, "package.json"), JSON.stringify({ version: "0.2.1-rc.3" }));
+    fs.symlinkSync(runtime, path.join(staleOld, "runtime"), "junction");
+    writeFile(path.join(staleOld, "package.json"), JSON.stringify({ version: "0.2.1-rc.2" }));
+
+    const deleteOldJs = path.join(stage, "delete-old.js");
+    writeFile(
+      deleteOldJs,
+      [
+        "var fso = new ActiveXObject('Scripting.FileSystemObject');",
+        `var oldDir = ${JSON.stringify(oldBackupDir)};`,
+        "if (fso.FolderExists(oldDir)) fso.DeleteFolder(oldDir, true);",
+        "",
+      ].join("\r\n")
+    );
+
+    const nsisErrFile = path.join(stage, "nsis-error.txt");
+    const fakeNsisMjs = path.join(stage, "fake-nsis.mjs");
+    writeFile(
+      fakeNsisMjs,
+      [
+        'import fs from "node:fs";',
+        'import path from "node:path";',
+        'import { spawnSync } from "node:child_process";',
+        `const installDir = ${JSON.stringify(installDir)};`,
+        `const oldDir = ${JSON.stringify(oldBackupDir)};`,
+        `const deleteOldJs = ${JSON.stringify(deleteOldJs)};`,
+        `const errFile = ${JSON.stringify(nsisErrFile)};`,
+        `const skills = ${JSON.stringify(OFFICE_SKILLS)};`,
+        // 1) NSIS MoveFileExW(installDir, installDir.old-{GUID})：若 wscript 仍占着 installDir CWD 则必报 EPERM/32
+        "try {",
+        "  fs.renameSync(installDir, oldDir);",
+        "} catch (e) {",
+        '  fs.writeFileSync(errFile, String(e && e.stack ? e.stack : e), "utf8");',
+        "  process.exit(2);",
+        "}",
+        // 2) NSIS 在原路径 installDir 释放新版文件（含新版 resources/runtime）
+        'fs.mkdirSync(path.join(installDir, "resources", "runtime"), { recursive: true });',
+        'fs.writeFileSync(path.join(installDir, "DeepSeek Harness.exe"), "v2-exe-stub", "utf8");',
+        'fs.writeFileSync(path.join(installDir, "resources", "app.asar"), "v2-packed-asar-payload", "utf8");',
+        "for (const rel of skills) {",
+        '  const fp = path.join(installDir, "resources", "runtime", rel);',
+        "  fs.mkdirSync(path.dirname(fp), { recursive: true });",
+        '  fs.writeFileSync(fp, `# v2 ${rel}\\n` + "z".repeat(80), "utf8");',
+        "}",
+        'fs.writeFileSync(path.join(installDir, "resources", "runtime", "manifest.json"), JSON.stringify({ version: 2, skills }), "utf8");',
+        // 3) NSIS RMDir /r 清理 .old-{GUID}：用会穿过存活 Junction 的 FSO.DeleteFolder 忠实还原
+        'const r = spawnSync("cscript.exe", ["//nologo", deleteOldJs], { stdio: "ignore", windowsHide: true });',
+        "if (r.status !== 0) process.exit(3);",
+        "process.exit(0);",
+        "",
+      ].join("\n")
+    );
+
+    const fakeNsisCmd = path.join(stage, "fake-nsis.cmd");
+    writeFile(
+      fakeNsisCmd,
+      ["@echo off", `"${process.execPath}" "${fakeNsisMjs}"`, "exit /b %ERRORLEVEL%", ""].join("\r\n")
+    );
+
+    const logPath = path.join(stage, "update.log");
+    const template = fs.readFileSync(path.join(PLUGIN_ROOT, "lib", "official-update.wscript"), "utf8");
+    const body = template
+      .split("__EXE_JSON__").join(mod.wshLiteral(fakeLaunchExe))
+      .split("__INSTALLER_JSON__").join(mod.wshLiteral(fakeNsisCmd))
+      .split("__RESOURCES_JSON__").join(mod.wshLiteral(resources))
+      .split("__INSTALL_DIR_JSON__").join(mod.wshLiteral(installDir))
+      .split("__LOG_JSON__").join(mod.wshLiteral(logPath));
+    ok("渲染后的 official-update.wscript 保持纯 ASCII", mod.isWshAscii(body) === true, "");
+    const handoffJs = path.join(stage, "handoff.js");
+    fs.writeFileSync(handoffJs, body, "utf8");
+
+    // 关键：以 installDir 作为初始 CWD 启动 cscript，复现从桌面快捷方式启动客户端升级的锁目录场景
+    runCscript(handoffJs, installDir);
+    await sleep(200);
+
+    const log = readLog(logPath);
+    const nsisErr = readLog(nsisErrFile);
+    ok("Bug 1 修复：CWD=installDir 启动时 NSIS 重命名安装目录不再报 error 32 (exit=0)", /installer 0/.test(log) && !nsisErr, nsisErr || "rename ok");
+    ok("NSIS .old-{GUID} 备份目录已被完整递归清理", !fs.existsSync(oldBackupDir), "");
+
+    let v2SkillsOk = true;
+    let v2Missing = "";
+    for (const rel of OFFICE_SKILLS) {
+      const fp = path.join(runtime, rel);
+      const txt = readLog(fp);
+      if (!txt.startsWith(`# v2 ${rel}\n`)) {
+        v2SkillsOk = false;
+        v2Missing = rel;
+        break;
+      }
+    }
+    ok("Bug 2 修复：NSIS 清理 .old-{GUID} 未穿透删空新版 resources\\runtime（7 个 v2 Office 技能完好）", v2SkillsOk, v2Missing || "all 7 v2 skills intact");
+    ok("升级成功后已落盘 dsh-purge-reapply-asar 标记", mod.upgradeMarkerExists(installedExe) === true, "");
+  }
+
+  // ─────────────────────────────────────────────────────────────
+  console.log("\n[9] Bug 2 回滚分支：摘除 prev\\runtime Junction 后若安装失败回滚，自动补回 app\\runtime Junction");
+  {
+    const fx = makeFixture(root, { name: "s9-rollback-junction" });
+    const logPath = path.join(fx.dir, "update.log");
+    const script = await renderHandoffScript(fx, { installer: makeFakeInstaller(fx, 2), logPath });
+    runCscript(script, fx.dir);
+    const intact = runtimeIntact(fx);
+    const restoredLink = path.join(fx.app, "runtime");
+    ok("失败回滚后真实 runtime 完好无损", intact.ok, intact.detail);
+    ok("失败回滚后 resources\\app 已恢复", fs.existsSync(path.join(fx.app, "package.json")), "");
+    ok("失败回滚后 app\\runtime Junction 已被 mklink /J 补回", isJunction(restoredLink), "");
+    ok("通过补回的 app\\runtime Junction 可正常读取 office/SKILL.md", fs.existsSync(path.join(restoredLink, "office", "SKILL.md")), "");
+  }
+
+  // ─────────────────────────────────────────────────────────────
+  console.log("\n[10] Bug 3 升级自动回写：settleInstalledPatches 优先处理 dsh-purge-reapply-asar 并触发换包重启");
+  {
+    const settleMod = await import(pathToFileURL(path.join(PLUGIN_ROOT, "lib", "settle-policy.js")).href);
+    const indexMod = await import(pathToFileURL(path.join(PLUGIN_ROOT, "lib", "index.js")).href);
+
+    ok("普通桌面冷启动 sealed=true 仍禁止静默 reapply", settleMod.settleMayReapply({ surface: "desktop", sealed: true }) === false, "");
+    ok("带 upgradeMarker 的桌面冷启动放行 reapply 与 restart", settleMod.settleMayReapply({ surface: "desktop", sealed: true, upgradeMarker: true }) === true && settleMod.settleMayRestart({ surface: "desktop", sealed: true, upgradeMarker: true }) === true, "");
+
+    const s10 = path.join(root, "s10-settle");
+    const exe = path.join(s10, "DeepSeek Harness.exe");
+    const resources = path.join(s10, "resources");
+    const markerFp = path.join(resources, "dsh-purge-reapply-asar");
+    const stalePrev = path.join(resources, "app.dshpurge-prev");
+    writeFile(exe, "stub");
+    writeFile(path.join(resources, "app.asar"), "sealed-v2-asar");
+    writeFile(path.join(stalePrev, "leftover.txt"), "old");
+
+    const reapplyCalls = [];
+    const swapCalls = [];
+    let markedRestart = 0;
+    const makeDeps = (overrides = {}) => ({
+      execPath: exe,
+      officialUpdate: mod,
+      currentSettleScope: () => ({ surface: "desktop", sealed: true }),
+      core: {
+        rememberUnpackedArchive: () => {},
+        desktopAsarStillSealed: () => true,
+        sealedAsarHandoff: () => ({ exe }),
+        restartSealedDesktopIfNeeded: (arg) => {
+          swapCalls.push(arg);
+          return { restarting: true, asarSwap: true };
+        },
+      },
+      reapply: {
+        ensureInstalledRevSeed: () => {},
+        healEmptyAppliedStamp: () => false,
+        patchesMatchInstallStrict: async () => false,
+        hostCleanEnoughToKeep: async () => false,
+        markPatchesApplied: () => {},
+        shouldSkipSettleRestart: () => true, // 即使刚点过应用处于冷却窗，一次性升级标记也不应被误拦
+        markSettleRestart: () => { markedRestart += 1; },
+        reapplyInstalled: async (opts) => {
+          reapplyCalls.push(opts);
+          return { ok: true, needsFullQuit: true };
+        },
+      },
+      hostctl: {
+        scheduleRestart: () => {},
+      },
+      ...overrides,
+    });
+
+    // 10a: 无标记 + autoApplyOnStart=false => 保持原有行为，不写宿主
+    const rNoMarkerOff = await indexMod.settleInstalledPatches({ autoApplyOnStart: false }, {}, { alive: true }, makeDeps());
+    ok("无升级标记且 autoApplyOnStart=false 时保持 skip:boot-no-host-write", rNoMarkerOff === "skip:boot-no-host-write" && reapplyCalls.length === 0, rNoMarkerOff);
+
+    // 10b: 无标记 + autoApplyOnStart=true + sealed=true => 保持 skip:sealed-wait-apply
+    const rNoMarkerOn = await indexMod.settleInstalledPatches({ autoApplyOnStart: true }, {}, { alive: true }, makeDeps());
+    ok("无升级标记且 sealed=true 时保持 skip:sealed-wait-apply", rNoMarkerOn === "skip:sealed-wait-apply" && reapplyCalls.length === 0, rNoMarkerOn);
+
+    // 10c: 存在 dsh-purge-reapply-asar + autoApplyOnStart=false + sealed=true => 穿透拦截完成解包回写并换包重启
+    writeFile(markerFp, "1\n");
+    const rUpgrade = await indexMod.settleInstalledPatches({ autoApplyOnStart: false }, {}, { alive: true }, makeDeps());
+    ok("Bug 3 修复：带升级标记时穿透 autoApplyOnStart=false 与 sealed 拦截并触发 restarting", rUpgrade === "restarting", rUpgrade);
+    ok(
+      "升级回写显式传入 upgrade=true 且 preserveClientBundles=false（确保新版前端 bundle 一并打补丁）",
+      reapplyCalls.length === 1 && reapplyCalls[0].upgrade === true && reapplyCalls[0].preserveClientBundles === false && reapplyCalls[0].scheduleSwap === false,
+      JSON.stringify(reapplyCalls[0] || {})
+    );
+    ok("升级回写完成后已清除一次性 dsh-purge-reapply-asar 标记", !fs.existsSync(markerFp), "");
+    ok("升级回写完成后已顺带清理残留 app.dshpurge-prev 目录", !fs.existsSync(stalePrev), "");
+    ok("密封新包回写后调用 restartSealedDesktopIfNeeded 换走 app.asar 并重启", swapCalls.length === 1 && swapCalls[0].execPath === exe && markedRestart === 1, "");
+
+    // 10d: execPath 为独立 node/helper 时通过 sealedAsarHandoff().exe 兜底定位标记；若标记粘滞 + 冷却生效则防死循环
+    writeFile(markerFp, "1\n");
+    const resolvedFallback = indexMod.resolveOfficialUpgradeExe("C:\\Program Files\\nodejs\\node.exe", makeDeps());
+    ok("resolveOfficialUpgradeExe 支持从 sealedAsarHandoff().exe 兜底定位升级标记", resolvedFallback === exe, resolvedFallback);
+
+    const stuckDeps = makeDeps({
+      officialUpdate: {
+        ...mod,
+        clearUpgradeMarker: () => ({ ok: false }), // 模拟标记无法删除（粘滞）
+      },
+    });
+    const rStuck = await indexMod.settleInstalledPatches({ autoApplyOnStart: false }, {}, { alive: true }, stuckDeps);
+    ok("标记删除失败（粘滞）且处于重启冷却窗时停止重启防止死循环", rStuck === "reapplied-no-restart", rStuck);
+    fs.rmSync(markerFp, { force: true });
+  }
+
   console.log("\n────────────────────────────────────────");
   console.log(`PASS ${pass}  FAIL ${fail}`);
   if (fail > 0) console.log("失败项:\n  - " + failures.join("\n  - "));

@@ -134,5 +134,71 @@ idMod.installAssembleGuard(fakePrompt, (assembled) => idMod.rewritePromptAssembl
 const guardedOut = await fakePrompt.assemble({});
 check("assembleGuard 原生异常时仍保留破甲注入", guardedOut.sections.some((s) => String(s?.text || "").includes("INJECT_PAYLOAD_OK")));
 
+// 8) #45 / #46 / #93 desktop-shell 官方更新交接 CWD 解锁与跨版本升级幂等性
+const p45 = core.ALL_PATCHES.find((p) => p.id === 45);
+const p46 = core.ALL_PATCHES.find((p) => p.id === 46);
+const p93 = core.ALL_PATCHES.find((p) => p.id === 93);
+check("#45 / #46 / #93 均已注册", Boolean(p45 && p46 && p93));
+
+const countOccurrences = (haystack, needle) => haystack.split(needle).length - 1;
+const applyDesktopUpdateChain = (src) => {
+  const s45 = core.applyReplacementsToText(src, p45, "desktop/lib/main.js");
+  const s46 = core.applyReplacementsToText(s45.text, p46, "desktop/lib/main.js");
+  const s93 = core.applyReplacementsToText(s46.text, p93, "desktop/lib/main.js");
+  return { text: s93.text, c45: s45.changed, c46: s46.changed, c93: s93.changed };
+};
+
+const stockDesktopShell = [
+  "var DesktopUpdateCoordinator = class {",
+  "\tinstallAndRestart() {",
+  "\t\t\t\tthis.updater.quitAndInstall(true, true);",
+  "\t}",
+  "};",
+].join("\n");
+
+const freshOut = applyDesktopUpdateChain(stockDesktopShell);
+check("#45 全新宿主一次命中且 #46/#93 自动跳过", freshOut.c45 === true && freshOut.c46 === false && freshOut.c93 === false);
+check("#45 注入 launchCwd + cd /d + start /D + spawn cwd", freshOut.text.includes("cwd: launchCwd") && freshOut.text.includes("start \\\"\\\" /D \\\"\" + launchCwd") && freshOut.text.includes("cd /d \\\"\" + launchCwd"));
+check("#45 不依赖未导入的 os/tmpdir 标识符", !/\bos\.tmpdir\b|\btmpdir\s*\(/.test(freshOut.text));
+check("#45 仅声明一次 dshPurgeWshLiteral / dshPurgeHandoffDesktopUpdate", countOccurrences(freshOut.text, "function dshPurgeWshLiteral(") === 1 && countOccurrences(freshOut.text, "function dshPurgeHandoffDesktopUpdate(") === 1);
+const freshAgain = applyDesktopUpdateChain(freshOut.text);
+check("#45/#46/#93 全新宿主二次执行完全幂等", !freshAgain.c45 && !freshAgain.c46 && !freshAgain.c93 && freshAgain.text === freshOut.text);
+
+// 模拟 1.1.21–1.1.80 已打补丁的 desktop-shell（带 dshPurgeWshLiteral，无 launchCwd）
+const legacy1180Shell = freshOut.text
+  .replace(
+    "\t\tconst launchCwd = process.env.TEMP || process.env.TMP || homedir();\n" +
+    "\t\tconst script = join(launchCwd, \"dsh-purge-official-update.js\");\n" +
+    "\t\tconst launcher = join(launchCwd, \"dsh-purge-official-update.cmd\");\n" +
+    "\t\twriteFileSync(script, body, \"utf8\");\n" +
+    "\t\twriteFileSync(launcher, \"@echo off\\r\\ncd /d \\\"\" + launchCwd + \"\\\"\\r\\nstart \\\"\\\" /D \\\"\" + launchCwd + \"\\\" wscript.exe //nologo //B \\\"\" + script + \"\\\"\\r\\n\", \"utf8\");\n" +
+    "\t\tspawn(\"cmd.exe\", [\"/d\", \"/c\", launcher], { cwd: launchCwd, detached: true, stdio: \"ignore\", windowsHide: true }).unref();",
+    "\t\tconst script = join(process.env.TEMP || \"\", \"dsh-purge-official-update.js\");\n" +
+    "\t\tconst launcher = join(process.env.TEMP || \"\", \"dsh-purge-official-update.cmd\");\n" +
+    "\t\twriteFileSync(script, body, \"utf8\");\n" +
+    "\t\twriteFileSync(launcher, \"@echo off\\r\\nstart \\\"\\\" wscript.exe //nologo //B \\\"\" + script + \"\\\"\\r\\n\", \"utf8\");\n" +
+    "\t\tspawn(\"cmd.exe\", [\"/d\", \"/c\", launcher], { detached: true, stdio: \"ignore\", windowsHide: true }).unref();"
+  );
+check("1.1.80 旧版夹具构造成功（不含 launchCwd）", !legacy1180Shell.includes("launchCwd"));
+const up1180 = applyDesktopUpdateChain(legacy1180Shell);
+check("#93 原地升级 1.1.21–1.1.80 宿主且不重复注入函数", up1180.c45 === false && up1180.c46 === false && up1180.c93 === true && up1180.text === freshOut.text);
+const up1180Again = applyDesktopUpdateChain(up1180.text);
+check("#93 升级后二次执行幂等", !up1180Again.c45 && !up1180Again.c46 && !up1180Again.c93);
+
+// 模拟 1.1.20 早期宿主（无 dshPurgeWshLiteral，且无 launchCwd）
+const legacy1120Shell = legacy1180Shell
+  .replace(
+    "function dshPurgeWshLiteral(value) {\n" +
+    "\treturn JSON.stringify(String(value == null ? \"\" : value)).replace(/[^\\u0000-\\u007e]/g, function (ch) {\n" +
+    "\t\treturn \"\\\\u\" + (\"0000\" + ch.charCodeAt(0).toString(16)).slice(-4);\n" +
+    "\t});\n" +
+    "}\n",
+    ""
+  )
+  .replaceAll("dshPurgeWshLiteral(", "JSON.stringify(")
+  .replace("\t\tfor (var i = 0; i < body.length; i++) { if (body.charCodeAt(i) > 127) throw new Error(\"desktop update script is not ascii\"); }\n", "");
+const up1120 = applyDesktopUpdateChain(legacy1120Shell);
+check("#46 + #93 串联升级 1.1.20 宿主且产物与全新 #45 完全一致", up1120.c45 === false && up1120.c46 === true && up1120.c93 === true && up1120.text === freshOut.text);
+
 console.log(failed === 0 ? "\nALL PASS" : `\n${failed} FAILED`);
 process.exit(failed === 0 ? 0 : 1);

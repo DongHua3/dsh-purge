@@ -7,14 +7,40 @@ if (installDir.length > 3) installDir = installDir.replace(/[\\\/]+$/, '');
 var logPath = __LOG_JSON__;
 var fso = new ActiveXObject('Scripting.FileSystemObject');
 var sh = new ActiveXObject('WScript.Shell');
+try { sh.CurrentDirectory = fso.GetSpecialFolder(2).Path; } catch (cwdErr) {}
 var wmi = GetObject('winmgmts:\\\\.\\root\\cimv2');
 function z(n) { return (n < 10 ? '0' : '') + n; }
 function stamp() { var d = new Date(); return d.getFullYear() + '-' + z(d.getMonth() + 1) + '-' + z(d.getDate()) + 'T' + z(d.getHours()) + ':' + z(d.getMinutes()) + ':' + z(d.getSeconds()); }
 function log(m) { var f = fso.OpenTextFile(logPath, 8, true); f.WriteLine(stamp() + ' ' + m); f.Close(); }
 function samePath(a, b) { return String(a || '').replace(/\//g, '\\').toLowerCase() === String(b || '').replace(/\//g, '\\').toLowerCase(); }
-function pids() { var out = []; var e = new Enumerator(wmi.ExecQuery("SELECT ProcessId, ExecutablePath FROM Win32_Process WHERE Name = 'DeepSeek Harness.exe'")); for (; !e.atEnd(); e.moveNext()) { var p = e.item(); if (samePath(p.ExecutablePath, exe)) out.push(p.ProcessId); } return out; }
+function pids() { var out = []; var exeName = fso.GetFileName(exe).replace(/'/g, "''"); var e = new Enumerator(wmi.ExecQuery("SELECT ProcessId, ExecutablePath FROM Win32_Process WHERE Name = '" + exeName + "'")); for (; !e.atEnd(); e.moveNext()) { var p = e.item(); if (samePath(p.ExecutablePath, exe)) out.push(p.ProcessId); } return out; }
 function fileSize(fp) { if (!fso.FileExists(fp)) return -1; return fso.GetFile(fp).Size; }
 function fileStamp(fp) { if (!fso.FileExists(fp)) return ''; return String(fso.GetFile(fp).DateLastModified); }
+function unlinkJunction(jp) {
+  sh.Run('cmd.exe /d /c if exist "' + jp + '" rmdir "' + jp + '"', 0, true);
+}
+function unlinkStaleRuntimes(resDir) {
+  if (!fso.FolderExists(resDir)) return;
+  try {
+    var subs = new Enumerator(fso.GetFolder(resDir).SubFolders);
+    for (; !subs.atEnd(); subs.moveNext()) {
+      var sf = subs.item();
+      var nm = String(sf.Name || '');
+      if (nm.toLowerCase().indexOf('app.dshpurge-') === 0) {
+        unlinkJunction(sf.Path + '\\runtime');
+      }
+    }
+  } catch (enumErr) {
+    log('unlink-stale ' + (enumErr && enumErr.message ? enumErr.message : enumErr));
+  }
+}
+function ensureRuntimeJunction(targetApp, resDir) {
+  var rt = resDir + '\\runtime';
+  var lk = targetApp + '\\runtime';
+  if (fso.FolderExists(targetApp) && fso.FolderExists(rt) && !fso.FolderExists(lk)) {
+    sh.Run('cmd.exe /d /c mklink /J "' + lk + '" "' + rt + '"', 0, true);
+  }
+}
 log('update-begin');
 WScript.Sleep(800);
 var list = pids();
@@ -33,10 +59,19 @@ if (fso.FolderExists(appDir)) {
   prev = appDir + '.dshpurge-prev';
   if (fso.FolderExists(prev)) prev = appDir + '.dshpurge-prev-' + (new Date().getTime());
   for (var n = 0; n < 40; n++) {
-    try { fso.MoveFolder(appDir, prev); movedApp = true; log('moved-app'); break; }
+    try {
+      fso.MoveFolder(appDir, prev);
+      movedApp = true;
+      unlinkJunction(prev + '\\runtime');
+      log('moved-app');
+      break;
+    }
     catch (moveErr) { log('move-app ' + (moveErr && moveErr.message ? moveErr.message : moveErr)); WScript.Sleep(250); }
   }
 }
+// Unlink runtime junctions inside any pre-existing app.dshpurge-* directories too so NSIS
+// RMDir /r on <installDir>.old-{GUID} cannot traverse an old junction into the new runtime.
+unlinkStaleRuntimes(resources);
 var copiedAsar = false;
 if (!fso.FileExists(asar) && fso.FileExists(bak)) {
   try { fso.CopyFile(bak, asar, true); copiedAsar = true; log('restored-asar'); }
@@ -92,7 +127,13 @@ if (!ok) {
     if (fso.FolderExists(appDir)) {
       for (var k = 0; k < 20; k++) {
         var quarantine = appDir + '.dshpurge-failed-' + (new Date().getTime());
-        try { fso.MoveFolder(appDir, quarantine); isolated = quarantine; log('isolated-app ' + quarantine); break; }
+        try {
+          fso.MoveFolder(appDir, quarantine);
+          unlinkJunction(quarantine + '\\runtime');
+          isolated = quarantine;
+          log('isolated-app ' + quarantine);
+          break;
+        }
         catch (isoErr) { log('isolate-app ' + (isoErr && isoErr.message ? isoErr.message : isoErr)); WScript.Sleep(250); }
       }
       if (fso.FolderExists(appDir)) log('isolate-app-kept ' + appDir);
@@ -103,9 +144,14 @@ if (!ok) {
     var originalPrev = appDir + '.dshpurge-prev';
     var restoreFrom = fso.FolderExists(originalPrev) ? originalPrev : prev;
     if (!fso.FolderExists(appDir) && restoreFrom && fso.FolderExists(restoreFrom)) {
-      try { fso.MoveFolder(restoreFrom, appDir); log('restored-app ' + restoreFrom); }
+      try {
+        fso.MoveFolder(restoreFrom, appDir);
+        ensureRuntimeJunction(appDir, resources);
+        log('restored-app ' + restoreFrom);
+      }
       catch (backErr) { log('restored-app ' + (backErr && backErr.message ? backErr.message : backErr)); }
     } else if (fso.FolderExists(appDir)) {
+      ensureRuntimeJunction(appDir, resources);
       log('restore-app-skipped ' + appDir);
     }
   }
