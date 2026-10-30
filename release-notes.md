@@ -1,3 +1,25 @@
+# 1.1.82
+
+## 中文
+
+- 版本 **1.1.82**，同步上游 `YuJunZhiXue/dsh-purge`（v1.1.83 / PR #188 / #191 / #185 / #180）核心健壮性优化，同时完整保留本分支独有的 Windows 桌面端升级接管三连环修复（Bug 1/2/3）：
+  - **补丁状态机引入漂移判定（`drifted`）**：补丁失配不再静默退化为 `skipped` 软成功。当目标文件存在且未包含标记、但所有 pattern 均未命中时，显式标记为 `drifted`（上游漂移），并在状态面板和 CLI 中标红告警，杜绝宿主升级后「全绿假象」。自标记型补丁（如 #80）保留为 `skipped`，多文件补丁已有文件命中时不报假漂移。
+  - **宿主版本门禁机制（`hostCompat`）**：自动读取宿主 `package.json` 真实版本与插件 `package.json` 中的 `dshTarget` 进行语义化比对，在宿主版本失配时于状态面板与 CLI 顶部以醒目警告横幅提示用户，不阻断执行但保证透明度。
+  - **`applyReplacementsToText` 支持命中数契约（`expect`）**：对字面量与正则表达式均支持显式 `expect` 校验，当实际命中次数与预期不符时整条拒写并返回 `hitMismatch`，彻底杜绝多处同名代码误替换。
+  - **pnpm 11 与 profile 配置健壮性**：`lib/profile-insert.js` 中 `allowBuilds` 仅保留裸包名并清除所有 `dsh-purge@*` 键，防止 pnpm 11 解析崩溃；`cordis.patch.yml` 为空 flow 序列 `[]` 时执行精准替换而非错误追加为第二文档。
+  - **#77 锚点容错优化**：重写为锚定首尾与非贪婪窗口 `(?:(?!isRewindMarker)[\s\S]){0,300}?`，宿主中间插行依然稳定命中且二次应用完全幂等。
+  - **全量测试覆盖**：新增 `test/patch-status.test.js`（29 项）与 `test/profile-insert.test.js`（22 项），全套测试 137 项断言全部 100% 通过。
+
+## English
+
+- **1.1.82**: Synchronize upstream `YuJunZhiXue/dsh-purge` (v1.1.83 / PRs #188, #191, #185, #180) robustness improvements while preserving our complete Windows desktop official upgrade handoff fixes (Bugs 1/2/3):
+  - **`drifted` Patch State Machine**: Unmatched patches on existing files without markers now classify as `drifted` rather than silently succeeding as `skipped`, preventing false-green status when upstream modifies target code. Self-marked patches remain soft-skipped.
+  - **Host Version Gate (`hostCompat`)**: Compares host runtime version against `dshTarget` (`parseHostVersion`), rendering prominent warning cards in the Web UI and CLI when mismatched.
+  - **Replacement Hit Count Contract (`expect`)**: Both literal and RegExp patterns enforce exact match counts, rejecting writes with `hitMismatch` if counts deviate.
+  - **pnpm 11 & Profile Insert Compatibility**: `allowBuilds` writes bare package names only, avoiding pnpm 11 crashes; `cordis.patch.yml` with empty flow sequence `[]` is safely replaced instead of creating invalid secondary documents.
+  - **Patch #77 Anchor Resilience**: Replaced strict 5-line match with non-greedy window `(?:(?!isRewindMarker)[\s\S]){0,300}?` excluding `isRewindMarker` for complete idempotency.
+  - **Full Test Suite Coverage**: Integrated `test/patch-status.test.js` (29 tests) and `test/profile-insert.test.js` (22 tests), all 137 assertions across 4 suites passing at 100%.
+
 # 1.1.81
 
 ## 中文
